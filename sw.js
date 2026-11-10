@@ -1,6 +1,6 @@
-// НеоПомощник: работа без интернета. Версия 202611101938
-const C = 'neo-202611101938';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './news.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+// НеоДневник Pro: работа без интернета. Версия 202611102037
+const C = 'neopro-202611102037';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(C).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== C).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
