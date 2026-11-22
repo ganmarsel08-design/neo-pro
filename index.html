@@ -1444,6 +1444,314 @@ body.vopen { overflow: hidden; }
 })();
 
 </script>
+<script id="shift-log">
+/* Журнал смены: быстрая запись событий по детям в течение смены (поступил, назначил, отменил, процедура,
+   исследование, анализ…). Время ставится само. Каждое событие сразу попадает в «Что было в это время»
+   нужного интервала дневника (08:30–12:00, 12:00–15:00 …), поэтому вечером ничего не нужно вспоминать.
+   Дозы и названия препаратов записываются ровно так, как вы их ввели: ничего не распознаётся и не подставляется.
+   Лента смены показывает всё по времени, порядок поступления и копируется текстом. */
+(function () {
+  var N = function () { return window.__neo || {}; };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var pad = function (x) { return ('0' + x).slice(-2); };
+  var nowHM = function () { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  var today = function () { return N().ae ? N().ae(Date.now()) : ''; };
+  var ddmm = function (d) { return d ? d.split('-').reverse().slice(0, 2).join('.') : ''; };
+  var clean = function (s) { return String(s || '').replace(/\s+/g, ' ').trim().replace(/[.;,\s]+$/, ''); };
+  // первое слово с маленькой буквы, но аббревиатуры (КОС, ЭхоКГ, PIP, НСГ) не трогаем
+  var lowerFirst = function (x) { var w = String(x || '').split(/[\s,:;]/)[0]; return w.length > 1 && w.slice(1) === w.slice(1).toLowerCase() && w.charAt(0) !== w.charAt(0).toLowerCase() ? x.charAt(0).toLowerCase() + x.slice(1) : x; };
+  var lsGet = function (k) { try { return localStorage.getItem('neo.sl.' + k); } catch (e) { return null; } };
+  var lsSet = function (k, v) { try { localStorage.setItem('neo.sl.' + k, v); } catch (e) { } };
+
+  var TYPES = [
+    { k: 'adm', l: 'Поступил', ph: 'Откуда, как поступил, состояние — по желанию', q: [] },
+    { k: 'rx', l: 'Назначил', ph: 'Препарат, доза, путь, кратность — как назначили', q: [] },
+    { k: 'rxoff', l: 'Отменил', ph: 'Что отменили', q: [] },
+    { k: 'chg', l: 'Изменил', ph: 'Что изменили: параметры ИВЛ, дозу, скорость инфузии…', q: [] },
+    { k: 'proc', l: 'Процедура', ph: 'Что проведено', q: ['Сурфактант эндотрахеально', 'Интубация трахеи', 'Катетеризация пупочной вены', 'Дренаж плевральной полости', 'Гемотрансфузия', 'Люмбальная пункция'] },
+    { k: 'dx', l: 'Исследование', ph: 'Что и с каким результатом', q: ['ЭхоКГ', 'НСГ', 'Рентгенография ОГК и ОБП', 'УЗИ органов брюшной полости', 'Забор крови на стерильность'] },
+    { k: 'lab', l: 'Анализ', ph: 'Что и какие значения', q: ['КОС: pH ', 'ОАК', 'СРБ', 'Биохимия', 'Глюкоза крови'] },
+    { k: 'cons', l: 'Консультация', ph: 'Кто смотрел и что рекомендовал', q: ['Кардиохирург', 'Невролог', 'Хирург', 'Консилиум'] },
+    { k: 'note', l: 'Другое', ph: 'Любое событие', q: [] }
+  ];
+  var TL = {}; TYPES.forEach(function (t) { TL[t.k] = t; });
+
+  /* ---------- сутки 08:30 → 08:30 и интервалы дневника ---------- */
+  function dayFor(date, hm) { return hm && hm < '08:30' ? N().prev(date) : date; }
+  function slotFor(hm) {
+    var F0 = N().F0 || [];
+    for (var i = 0; i < F0.length; i++) { var p = F0[i].split('–'); if (hm >= p[0] && hm < p[1]) return F0[i]; }
+    return F0[0];
+  }
+  function getKid(id) { return (N().kids() || []).find(function (k) { return k.id === id; }); }
+
+  /* ---------- текст события для дневника ---------- */
+  function sent(it, first) {
+    var x = lowerFirst(clean(it.text)), body;
+    switch (it.type) {
+      case 'adm': body = 'поступил в ОРИТН' + (x ? ': ' + x : ''); break;
+      case 'rx': body = 'назначено: ' + x; break;
+      case 'rxoff': body = 'отменено: ' + x; break;
+      case 'chg': body = 'изменено: ' + x; break;
+      case 'proc': body = 'проведено: ' + x; break;
+      case 'dx': body = 'выполнено: ' + x; break;
+      case 'lab': body = 'получен результат: ' + x; break;
+      case 'cons': body = 'консультация: ' + x; break;
+      default: body = x;
+    }
+    // в первом интервале суток текст идёт в «За прошедшие сутки: …», поэтому без заглавной и без точки
+    return first ? 'в ' + it.hm + ' ' + body : 'В ' + it.hm + ' ' + body + '.';
+  }
+  function place(k, it) {
+    var F0 = N().F0, dk = dayFor(it.date, it.hm), slot = slotFor(it.hm);
+    if (k.bd && dk < k.bd) { dk = k.bd; slot = F0[0]; }
+    return { dk: dk, slot: slot, first: slot === F0[0] };
+  }
+  function getNote(e, slot, first) { return first ? (e.note || '') : ((e.slotNote || {})[slot] || ''); }
+  function setNote(e, slot, first, v) {
+    if (first) { if (v) e.note = v; else delete e.note; return; }
+    if (v) { e.slotNote = e.slotNote || {}; e.slotNote[slot] = v; }
+    else if (e.slotNote) { delete e.slotNote[slot]; if (!Object.keys(e.slotNote).length) delete e.slotNote; }
+  }
+  function inject(k, it) {
+    var p = place(k, it); k.days = k.days || {};
+    var e = k.days[p.dk] || (k.days[p.dk] = {}), cur = getNote(e, p.slot, p.first), s = sent(it, p.first);
+    var base = p.first ? cur.replace(/[.\s]+$/, '') : cur;
+    setNote(e, p.slot, p.first, base ? base + (p.first ? '; ' : ' ') + s : s);
+    it.dk = p.dk; it.slot = p.slot; it.s = s;
+  }
+  // убирает ровно ту фразу, которую добавили; если врач её уже переписал руками — не трогает дневник
+  function uninject(k, it) {
+    if (!it.dk || !it.s || !k.days || !k.days[it.dk]) return false;
+    var e = k.days[it.dk], first = it.slot === N().F0[0], cur = getNote(e, it.slot, first), i = cur.indexOf(it.s);
+    if (i < 0) return false;
+    var before = cur.slice(0, i), after = cur.slice(i + it.s.length);
+    if (/(;\s|\s)$/.test(before) && before.trim()) before = before.replace(/(;\s*|\s+)$/, ''); else after = after.replace(/^(;\s*|\s+)/, '');
+    setNote(e, it.slot, first, (before + (before && after ? (first ? '; ' : ' ') : '') + after).trim());
+    if (!Object.keys(e).length) delete k.days[it.dk];
+    return true;
+  }
+  var uid = function () { return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); };
+  function addEvent(kid, o) {
+    var k = getKid(kid); if (!k) return null;
+    var it = { id: uid(), date: o.date, hm: o.hm, type: o.type, text: clean(o.text), ts: Date.now() };
+    inject(k, it); (k.log = k.log || []).push(it); N().save(k); return it;
+  }
+  function delEvent(kid, id) {
+    var k = getKid(kid); if (!k) return null;
+    var it = (k.log || []).find(function (x) { return x.id === id; }); if (!it) return null;
+    var snap = JSON.parse(JSON.stringify(it)), ok = uninject(k, it);
+    k.log = k.log.filter(function (x) { return x.id !== id; }); N().save(k); return { it: snap, ok: ok };
+  }
+  function editEvent(kid, id, o) {
+    var k = getKid(kid); if (!k) return false;
+    var it = (k.log || []).find(function (x) { return x.id === id; }); if (!it) return false;
+    var ok = uninject(k, it);
+    it.date = o.date; it.hm = o.hm; it.type = o.type; it.text = clean(o.text); inject(k, it); N().save(k); return ok;
+  }
+  function refresh() { try { if (/^#kid-/.test(location.hash) && N().rerender) N().rerender(); } catch (e) { } }
+
+  /* ---------- вспомогательное оформление ---------- */
+  var DOSE = /(\d+(?:[.,]\d+)?\s?(?:мкг|мг|г|мл|ед|ме|ммоль|мэкв)(?:\/[а-я]+){0,2})/gi;
+  var showText = function (s) { return esc(s).replace(DOSE, '<mark>$1</mark>'); };
+  function toast(msg, undoLabel, undo) {
+    var old = document.querySelector('.vundo.sl'); if (old) old.remove();
+    var t = document.createElement('div'); t.className = 'vundo sl';
+    t.innerHTML = '<span>' + msg + '</span>' + (undo ? '<button type="button">' + undoLabel + '</button>' : '');
+    if (undo) t.querySelector('button').onclick = function () { undo(); t.remove(); };
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 7000);
+  }
+  function kidsList() { return (N().kids() || []).filter(function (k) { return !k.out; }); }
+  function kidName(k) { return k.label || 'Ребёнок'; }
+  function kidChip(k, sel) {
+    var d = ''; try { d = ' · ' + N().G0(k, today()) + ' сут'; } catch (e) { }
+    return '<button type="button" data-kid="' + esc(k.id) + '"' + (sel ? ' aria-pressed="true"' : '') + '>' + esc(kidName(k)) + d + '</button>';
+  }
+  function closeSheet() {
+    var s = document.getElementById('slsh'); if (s) s.remove();
+    if (!document.getElementById('vsh') && !document.getElementById('ash')) document.body.classList.remove('vopen');
+  }
+  function openSheet(html) {
+    closeSheet();
+    var s = document.createElement('div'); s.id = 'slsh'; s.className = 'vsheet';
+    s.innerHTML = '<div class="vbox sl-box">' + html + '</div>';
+    s.addEventListener('click', function (e) { if (e.target === s) closeSheet(); });
+    document.body.appendChild(s); document.body.classList.add('vopen');
+    return s;
+  }
+
+  /* ================= ЗАПИСАТЬ СОБЫТИЕ ================= */
+  var S = null;
+  function openAdd(edit) {
+    var kids = kidsList();
+    S = { kid: '', type: lsGet('type') || 'rx', hm: nowHM(), date: today(), text: '', edit: null };
+    if (edit) { S.kid = edit.kid; S.type = edit.it.type; S.hm = edit.it.hm; S.date = edit.it.date; S.text = edit.it.text; S.edit = edit; }
+    else {
+      var last = lsGet('kid');
+      S.kid = kids.some(function (k) { return k.id === last; }) ? last : (kids.length === 1 ? kids[0].id : '');
+    }
+    renderAdd();
+  }
+  function renderAdd() {
+    var kids = kidsList(), T = TL[S.type] || TYPES[1], tdy = today(), yst = N().prev(tdy);
+    if (S.edit && !kids.some(function (k) { return k.id === S.edit.kid; })) { var ek = getKid(S.edit.kid); if (ek) kids = [ek].concat(kids); }
+    var html = '<div class="sl-h"><b>' + (S.edit ? 'Правка события' : 'Новое событие') + '</b><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></div>' +
+      (kids.length ? '' : '<p class="pill warn">В отделении нет детей. Сначала добавьте ребёнка.</p>') +
+      '<p class="meta sl-l">Кто</p><div class="chips sl-kids">' + kids.map(function (k) { return kidChip(k, k.id === S.kid); }).join('') + '</div>' +
+      '<p class="meta sl-l">Что</p><div class="chips sl-types">' + TYPES.map(function (t) { return '<button type="button" data-type="' + t.k + '"' + (t.k === S.type ? ' aria-pressed="true"' : '') + '>' + t.l + '</button>'; }).join('') + '</div>' +
+      (T.q.length ? '<div class="chips sl-q">' + T.q.map(function (q, i) { return '<button type="button" data-q="' + i + '">' + esc(q) + '</button>'; }).join('') + '</div>' : '') +
+      '<div class="sl-time"><label class="f"><span>Время</span><span class="inp"><input type="time" id="slTime" value="' + esc(S.hm) + '"></span></label>' +
+      '<div class="chips sl-dates">' + [[tdy, 'Сегодня'], [yst, 'Вчера']].map(function (d) { return '<button type="button" data-date="' + d[0] + '"' + (S.date === d[0] ? ' aria-pressed="true"' : '') + '>' + d[1] + ' · ' + ddmm(d[0]) + '</button>'; }).join('') + '</div></div>' +
+      '<label class="f sl-f"><span>' + (S.type === 'adm' ? 'Подробности (по желанию)' : 'Текст события') + '</span><textarea class="ctext" id="slText" rows="2" placeholder="' + esc(T.ph) + '">' + esc(S.text) + '</textarea></label>' +
+      '<p class="meta sl-hint">Названия и дозы записываются как введены — проверьте их перед сохранением. Голосом: микрофон на клавиатуре телефона.</p>' +
+      '<p class="pill warn" id="slErr" hidden></p>' +
+      '<div class="actions sl-act"><button type="button" class="btn pro-btn" id="slSave">' + (S.edit ? 'Сохранить' : 'Записать') + '</button>' +
+      (S.edit ? '' : '<button type="button" class="btn ghost" id="slSaveMore">Записать и ещё</button>') +
+      '<button type="button" class="btn ghost" id="slToLog">Лента смены</button></div>';
+    var sh = openSheet(html), box = sh.querySelector('.vbox'), ta = sh.querySelector('#slText'), err = sh.querySelector('#slErr');
+    ta.addEventListener('input', function () { S.text = ta.value; });
+    sh.querySelector('#slTime').addEventListener('input', function (e) { S.hm = e.target.value || S.hm; });
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) { closeSheet(); return; }
+      if (b.dataset.kid) { S.kid = b.dataset.kid; renderAdd(); return; }
+      if (b.dataset.type) { S.type = b.dataset.type; renderAdd(); return; }
+      if (b.dataset.date) { S.date = b.dataset.date; renderAdd(); return; }
+      if (b.dataset.q != null) {
+        var q = TL[S.type].q[+b.dataset.q];
+        S.text = S.text && !/[.,:;]$/.test(S.text.trim()) ? S.text.trim() + ', ' + q : (S.text ? S.text + ' ' : '') + q;
+        renderAdd(); var t2 = document.getElementById('slText'); t2.focus(); t2.setSelectionRange(t2.value.length, t2.value.length); return;
+      }
+      if (b.id === 'slToLog') { openLog(); return; }
+      if (b.id === 'slSave' || b.id === 'slSaveMore') save(b.id === 'slSaveMore');
+    });
+    function bad(m) { err.textContent = m; err.hidden = false; }
+    function save(more) {
+      S.text = ta.value; S.hm = sh.querySelector('#slTime').value || S.hm;
+      if (!S.kid) return bad('Выберите ребёнка.');
+      if (!/^\d\d:\d\d$/.test(S.hm)) return bad('Укажите время.');
+      if (S.type !== 'adm' && !clean(S.text)) return bad('Напишите, что именно произошло.');
+      var o = { date: S.date, hm: S.hm, type: S.type, text: S.text }, k = getKid(S.kid), nm = k ? kidName(k) : '';
+      if (S.edit) {
+        var okE = editEvent(S.edit.kid, S.edit.it.id, o);
+        closeSheet(); refresh(); toast('Сохранено.' + (okE ? '' : ' Прежнюю фразу в дневнике уберите вручную — вы её меняли.'));
+        if (S.edit.back) openLog(); return;
+      }
+      var it = addEvent(S.kid, o); if (!it) return bad('Не удалось сохранить: ребёнок не найден.');
+      lsSet('kid', S.kid); lsSet('type', S.type); refresh();
+      if (more) { S.text = ''; S.hm = nowHM(); S.date = today(); renderAdd(); toast('✓ ' + esc(nm) + ': записано в ' + it.hm); return; }
+      var kidId = S.kid;
+      closeSheet();
+      toast('✓ ' + esc(nm) + ': записано в ' + it.hm + ' → дневник ' + esc(it.slot), 'Отменить', function () { delEvent(kidId, it.id); refresh(); });
+    }
+  }
+
+  /* ================= ЛЕНТА СМЕНЫ ================= */
+  var L = { shift: null, by: 'time' };
+  function allEvents(shift) {
+    var out = [];
+    (N().kids() || []).forEach(function (k) {
+      (k.log || []).forEach(function (it) { if (dayFor(it.date, it.hm) === shift) out.push({ k: k, it: it }); });
+    });
+    out.sort(function (a, b) { return (a.it.date + ' ' + a.it.hm + ' ' + (a.it.ts || 0)).localeCompare(b.it.date + ' ' + b.it.hm + ' ' + (b.it.ts || 0)); });
+    return out;
+  }
+  function shiftLabel(shift) { var nx = new Date(new Date(shift + 'T12:00').getTime() + 864e5); return '08:30 ' + ddmm(shift) + ' → 08:30 ' + ddmm(N().ae(nx.getTime())); }
+  function arrivals(evs) { return evs.filter(function (x) { return x.it.type === 'adm'; }); }
+  function logText(shift) {
+    var evs = allEvents(shift), out = ['Смена ' + shiftLabel(shift)], ar = arrivals(evs);
+    if (ar.length) out.push('Порядок поступления: ' + ar.map(function (x, i) { return (i + 1) + ') ' + x.it.hm + ' ' + kidName(x.k); }).join('; '));
+    var line = function (x) { var s = sent(x.it, false); return s.replace(/^В (\d\d:\d\d) /, '$1 ').replace(/\.$/, ''); };
+    if (L.by === 'kid') {
+      var seen = {}; evs.forEach(function (x) { (seen[x.k.id] = seen[x.k.id] || { k: x.k, l: [] }).l.push(line(x)); });
+      Object.keys(seen).forEach(function (id) { out.push('', kidName(seen[id].k)); seen[id].l.forEach(function (l) { out.push(l); }); });
+    } else { out.push(''); evs.forEach(function (x) { out.push(kidName(x.k) + ' — ' + line(x)); }); }
+    return out.join('\n');
+  }
+  function openLog(shift) {
+    var tdy = today(), cur = dayFor(tdy, nowHM());
+    L.shift = shift || L.shift || cur;
+    var evs = allEvents(L.shift), ar = arrivals(evs);
+    var row = function (x) {
+      return '<li class="sl-row" data-k="' + esc(x.k.id) + '" data-id="' + esc(x.it.id) + '"><div class="sl-r1"><b>' + esc(x.it.hm) + '</b>' +
+        (L.by === 'kid' ? '' : '<span class="sl-kid">' + esc(kidName(x.k)) + '</span>') + '<span class="sl-type">' + esc((TL[x.it.type] || TL.note).l) + '</span>' +
+        '<span class="sl-btns"><button type="button" data-edit aria-label="Править">✎</button><button type="button" data-del aria-label="Удалить">🗑</button></span></div>' +
+        '<div class="sl-txt">' + (showText(x.it.text) || '<i class="meta">без подробностей</i>') + '</div></li>';
+    };
+    var body;
+    if (!evs.length) body = '<p class="meta">За эту смену событий пока нет. Нажмите «＋ Событие», когда что-то произошло: время поставится само.</p>';
+    else if (L.by === 'kid') {
+      var g = {}, ord = []; evs.forEach(function (x) { if (!g[x.k.id]) { g[x.k.id] = []; ord.push(x.k); } g[x.k.id].push(x); });
+      body = ord.map(function (k) { return '<h3 class="sl-gh">' + esc(kidName(k)) + '</h3><ul class="sl-list">' + g[k.id].map(row).join('') + '</ul>'; }).join('');
+    } else body = '<ul class="sl-list">' + evs.map(row).join('') + '</ul>';
+    var html = '<div class="sl-h"><b>Лента смены</b><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></div>' +
+      '<div class="chips sl-shifts">' + [[cur, 'Эта смена'], [N().prev(cur), 'Предыдущая']].map(function (d) { return '<button type="button" data-shift="' + d[0] + '"' + (L.shift === d[0] ? ' aria-pressed="true"' : '') + '>' + d[1] + '</button>'; }).join('') + '</div>' +
+      '<p class="meta">' + shiftLabel(L.shift) + ' · событий: ' + evs.length + '</p>' +
+      (ar.length ? '<div class="card sl-arr"><b>Порядок поступления</b><ol>' + ar.map(function (x) { return '<li>' + esc(x.it.hm) + ' — ' + esc(kidName(x.k)) + (x.it.text ? ' <span class="meta">(' + esc(x.it.text) + ')</span>' : '') + '</li>'; }).join('') + '</ol></div>' : '') +
+      '<div class="chips sl-by"><button type="button" data-by="time"' + (L.by === 'time' ? ' aria-pressed="true"' : '') + '>По времени</button><button type="button" data-by="kid"' + (L.by === 'kid' ? ' aria-pressed="true"' : '') + '>По детям</button></div>' +
+      body + '<div class="actions sl-act"><button type="button" class="btn pro-btn" id="slNew">＋ Событие</button><button type="button" class="btn ghost" id="slCopy"' + (evs.length ? '' : ' disabled') + '>Скопировать</button></div>';
+    var sh = openSheet(html);
+    sh.querySelector('.vbox').addEventListener('click', async function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) { closeSheet(); return; }
+      if (b.dataset.shift) { L.shift = b.dataset.shift; openLog(); return; }
+      if (b.dataset.by) { L.by = b.dataset.by; openLog(); return; }
+      if (b.id === 'slNew') { openAdd(); return; }
+      if (b.id === 'slCopy') {
+        var txt = logText(L.shift);
+        try { await navigator.clipboard.writeText(txt); toast('Лента скопирована.'); } catch (er) { toast('Не удалось скопировать. Выделите текст вручную.'); }
+        return;
+      }
+      var li = b.closest('.sl-row'); if (!li) return;
+      var kid = li.dataset.k, id = li.dataset.id;
+      if (b.hasAttribute('data-edit')) { var k = getKid(kid), it = k && (k.log || []).find(function (x) { return x.id === id; }); if (it) openAdd({ kid: kid, it: JSON.parse(JSON.stringify(it)), back: true }); return; }
+      if (b.hasAttribute('data-del')) {
+        var r = delEvent(kid, id); if (!r) return; refresh(); openLog();
+        toast('Событие удалено' + (r.ok ? ' и убрано из дневника.' : '. Из дневника уберите вручную: вы правили эту фразу.'), 'Вернуть', function () {
+          var k2 = getKid(kid); if (!k2) return; var it2 = r.it; delete it2.dk; delete it2.s; inject(k2, it2); (k2.log = k2.log || []).push(it2); N().save(k2); refresh(); openLog();
+        });
+      }
+    });
+  }
+
+  /* ---------- кнопка «＋ Событие» ---------- */
+  function fab() {
+    var h = location.hash, pro = (h === '' || h === '#kids') ? !!document.querySelector('.pro-strip') : (/^#kid-/.test(h) || h === '#round');
+    var on = pro && N().kids && !document.getElementById('vsh') && !document.getElementById('ash') && !document.getElementById('slsh');
+    var f = document.getElementById('slFab');
+    if (!on) { if (f) f.remove(); return; }
+    if (f) return;
+    f = document.createElement('button'); f.id = 'slFab'; f.type = 'button'; f.textContent = '＋ Событие';
+    f.setAttribute('aria-label', 'Записать событие смены');
+    f.addEventListener('click', function () { openAdd(); });
+    document.body.appendChild(f);
+  }
+  function logLink() {
+    if (location.hash !== '#kids' && location.hash !== '') return;
+    var strip = document.querySelector('.pro-strip'); if (!strip || document.getElementById('slLink')) return;
+    var bar = document.createElement('div'); bar.id = 'slLink'; bar.className = 'actions rd-links';
+    bar.innerHTML = '<button type="button" class="btn pro-btn" id="slOpen">＋ Событие смены</button><button type="button" class="btn ghost" id="slOpenLog">📋 Лента смены</button>';
+    var anchor = document.getElementById('rdLink') || strip;
+    anchor.parentNode.insertBefore(bar, anchor.nextSibling);
+    bar.querySelector('#slOpen').onclick = function () { openAdd(); };
+    bar.querySelector('#slOpenLog').onclick = function () { openLog(); };
+  }
+  function tick() { fab(); logLink(); }
+  var st = document.createElement('style');
+  st.textContent = '#slFab{position:fixed;left:14px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:41;border:0;border-radius:99px;height:50px;padding:0 20px;font:600 16px var(--font);background:var(--accent);color:var(--on-accent);box-shadow:0 6px 18px rgba(0,0,0,.28)}body.vopen #slFab{display:none}' +
+    '.sl-box{padding-bottom:calc(18px + env(safe-area-inset-bottom))}.sl-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:18px}.sl-x{border:0;background:none;font-size:20px;color:var(--muted);padding:6px 10px;cursor:pointer}' +
+    '.sl-l{margin:10px 2px 6px}.sl-q{margin-top:8px}.sl-q button{font-size:13px}.sl-f{margin-top:10px}.sl-f textarea{width:100%;box-sizing:border-box}.sl-hint{margin:6px 2px 8px;font-size:13px}' +
+    '.sl-time{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:end;margin:6px 0 8px}.sl-act{position:sticky;bottom:0;background:var(--card);padding:10px 0 2px;gap:8px;flex-wrap:wrap}.sl-act .btn{flex:1 1 30%;text-align:center}' +
+    '.sl-list{list-style:none;margin:0 0 6px;padding:0}.sl-row{padding:10px 0;border-top:1px solid var(--line)}.sl-r1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.sl-r1 b{font-family:var(--num);font-size:17px}.sl-kid{font-weight:600}.sl-type{font-size:12.5px;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:2px 9px}' +
+    '.sl-btns{margin-left:auto}.sl-btns button{border:0;background:none;font-size:17px;padding:4px 8px;cursor:pointer}.sl-txt{margin-top:3px;line-height:1.45;overflow-wrap:anywhere}.sl-txt mark{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:0 3px}' +
+    '.sl-gh{margin:14px 2px 2px;font-size:15px}.sl-arr{margin:8px 0}.sl-arr ol{margin:6px 0 0;padding-left:22px}.sl-by,.sl-shifts{margin:6px 0}';
+  document.head.appendChild(st);
+  new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 80); }).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('hashchange', function () { setTimeout(tick, 150); });
+  setTimeout(tick, 600);
+  window.__neoLog = { open: openAdd, log: openLog, add: addEvent, del: delEvent, edit: editEvent, sentence: sent, slotFor: slotFor, dayFor: dayFor, text: logText };
+})();
+</script>
 <script id="aig-import">
 /* Приём ребёнка из АиГДневника Pro: QR-код или код текстом. Создаёт карточку с данными матери и родов. */
 (function () {
