@@ -2098,38 +2098,45 @@ body.vopen { overflow: hidden; }
 
 
   /* ================= ДИКТОВКА: несколько событий и несколько детей за один раз ================= */
-  // Ребёнок определяется по началу фамилии (метки) или по «бокс 3 / третий бокс». Падежи не мешают: «Айтжановой» → «Айтжанова».
+  // Автоматический выбор действует только внутри фразы с явной меткой.
   var NUMW = { 'один': 1, 'одна': 1, 'первый': 1, 'первая': 1, 'два': 2, 'две': 2, 'второй': 2, 'вторая': 2, 'три': 3, 'третий': 3, 'третья': 3, 'четыре': 4, 'четвертый': 4, 'четвертая': 4, 'пять': 5, 'пятый': 5, 'пятая': 5, 'шесть': 6, 'шестой': 6, 'шестая': 6, 'семь': 7, 'седьмой': 7, 'седьмая': 7, 'восемь': 8, 'восьмой': 8, 'восьмая': 8, 'девять': 9, 'девятый': 9, 'девятая': 9, 'десять': 10, 'десятый': 10, 'десятая': 10, 'одиннадцать': 11, 'двенадцать': 12 };
   var SKIP_KEY = /^(бокс|кувез|кювез|кроватка|место|койка|палата|ребенок|мальчик|девочка|близнец|двойня)$/;
   var norm = function (s) { return String(s || '').toLowerCase().replace(/ё/g, 'е'); };
+  var BED_WORD = '(?:бокс[аеуы]?|кувез[аеуы]?|кювез[аеуы]?|кроватк[аеуи]|мест[оаеу]|койк[аеуи])';
+  var BED_NUMBER = BED_WORD + '\\s*(?:№|номер)?\\s*(\\d+|[а-я]+)(?![а-я\\d])';
+  var ORDINAL_BED = '([а-я]+)\\s+' + BED_WORD + '(?![а-я\\d])';
   function kidKeys(k) {
-    var lab = norm(k.label), keys = [], num = '';
-    lab.replace(/\([^)]*\)/g, ' ').split(/[^а-яa-z0-9]+/).forEach(function (w) {
-      if (/^[а-яa-z]{4,}$/.test(w) && !SKIP_KEY.test(w)) keys.push(w.slice(0, Math.max(4, w.length - 2)));
+    var lab = norm(k.label).replace(/\([^)]*\)/g, ' ');
+    var keys = (lab.match(/\p{Script=Cyrillic}{4,}/gu) || []).filter(function (w) { return !SKIP_KEY.test(w); });
+    var bed = new RegExp('(?:^|[^а-я])' + BED_WORD + '\\s*(?:№|номер)?\\s*(\\d+)(?![а-я\\d])').exec(lab);
+    return { k: k, keys: keys, num: bed ? String(+bed[1]) : '' };
+  }
+  function findMention(low, info) {
+    var prefix = /^(?:в\s+\d{1,2}:\d{2}[\s,]+)?(?:(?:у|по|для|на|ребенку|ребенка|ребенок)\s+)?/.exec(low)[0].length;
+    var text = low.slice(prefix);
+    var bed = new RegExp('^' + BED_NUMBER).exec(text);
+    var ordinal = new RegExp('^' + ORDINAL_BED).exec(text);
+    var word = /^(\p{Script=Cyrillic}{4,})(?![\p{Script=Cyrillic}\d])/u.exec(text);
+    var label = bed || (ordinal && NUMW[ordinal[1]] ? ordinal : word);
+    if (!label) return null;
+    var numbered = label !== word;
+    var number = numbered ? (/^\d+$/.test(label[1]) ? +label[1] : NUMW[label[1]]) : null;
+    var candidates = info.filter(function (x) {
+      return numbered ? number != null && x.num === String(number) : x.keys.indexOf(label[1]) >= 0;
     });
-    var m = /(?:бокс|кувез|кювез|кроватка|место|койка)\s*№?\s*(\d{1,2})/.exec(lab); if (m) num = String(+m[1]);
-    return { keys: keys, num: num };
-  }
-  function findMention(low, kids) {
-    var info = kids.map(function (k) { return { k: k, ky: kidKeys(k) }; }), best = null, re = /[а-я]{4,}/g, m;
-    while ((m = re.exec(low))) {
-      var matches = info.filter(function (x) { return x.ky.keys.some(function (st) { return m[0].indexOf(st) === 0; }); });
-      if (matches.length) { best = { kid: matches.length === 1 ? matches[0].k : null, start: m.index, end: m.index + m[0].length }; break; }
+    if (candidates.length !== 1) return null;
+
+    var end = prefix + label[0].length, rest = low.slice(end);
+    var otherWords = rest.match(/\p{Script=Cyrillic}{4,}/gu) || [];
+    var otherKid = info.some(function (x) {
+      return x !== candidates[0] && x.keys.some(function (key) { return otherWords.indexOf(key) >= 0; });
+    });
+    if (otherKid) return null;
+    var bedMentions = new RegExp('(?:^|[^а-я])(?:' + BED_NUMBER + '|' + ORDINAL_BED + ')', 'g'), match;
+    while ((match = bedMentions.exec(rest))) {
+      if (/^\d+$/.test(match[1] || '') || NUMW[match[1] || match[2]]) return null;
     }
-    var val = null, st = 0, en = 0, nm = /(бокс|кувез|кювез|кроватк[а-я]*|место|койк[а-я]*)\s*(?:№|номер)?\s*(\d{1,2}|[а-я]+)/.exec(low);
-    if (nm) { val = /^\d+$/.test(nm[2]) ? String(+nm[2]) : (NUMW[nm[2]] ? String(NUMW[nm[2]]) : null); st = nm.index; en = nm.index + nm[0].length; }
-    if (!val) { var om = /([а-я]+)\s+(бокс|кувез|кювез)/.exec(low); if (om && NUMW[om[1]]) { val = String(NUMW[om[1]]); st = om.index; en = om.index + om[0].length; } }
-    if (nm || val) {
-      var matched = val ? info.filter(function (x) { return x.ky.num === val; }) : [];
-      if (!best || st < best.start) best = { kid: matched.length === 1 ? matched[0].k : null, start: st, end: en };
-    }
-    return best;
-  }
-  // Неразборчивая фамилия или номер бокса не наследуют предыдущего ребёнка.
-  function unknownKidMention(s) {
-    var x = norm(s).trim();
-    if (/(^|[\s,:;])(?:бокс|кувез|кювез|койк[а-я]*|кроватк[а-я]*|ребен(?:ок|ка|ку)|палат[а-я]*)\b/.test(x)) return true;
-    return /^[а-я]{3,}(?:ова|овой|ева|евой|ина|иной|ов|ев|ин|ская|ской|ский)(?=[\s,:;—–-]|$)/.test(x);
+    return { kid: candidates[0].k, start: prefix, end: end };
   }
   // Словарь работает локально; исправление только по явному нажатию врача.
   var MED_TERMS = ['Куросурф', 'Сурванта', 'сурфактант', 'добутамин', 'норадреналин',
@@ -2152,7 +2159,9 @@ body.vopen { overflow: hidden; }
   function medSuggestions(s) {
     var result = [], re = /[а-яё]{5,}/gi, m;
     while ((m = re.exec(String(s || '')))) {
-      var w = norm(m[0]), options = MED_TERMS.map(function (v) {
+      var w = norm(m[0]);
+      if (MED_TERMS.some(function (v) { return norm(v) === w; })) continue;
+      var options = MED_TERMS.map(function (v) {
         var n = norm(v), dist = w[0] === n[0] ? medDistance(w, n) : 99;
         return { to: v, dist: dist };
       }).filter(function (x) { return x.dist > 0 && x.dist <= (w.length >= 10 ? 3 : 2); })
@@ -2185,16 +2194,13 @@ body.vopen { overflow: hidden; }
     ['rx', new RegExp('начат|начал|подключ|ввел|введен|инфуз|в/в|мкг|' + NW + 'мг' + NE + '|мл/ч')]
   ];
   var toMin = function (hm) { return +hm.slice(0, 2) * 60 + +hm.slice(3); };
-  function parseDictation(text, kids, defId) {
-    var rows = [], cur = kids.some(function (k) { return k.id === defId; }) ? defId : '', lastHM = '', nowT = nowHM(), tdy = today(), yst = N().prev(tdy);
-    String(text || '').replace(/([.!?;])\s+/g, '$1\u0001').split(/\u0001|\n+/).forEach(function (c0) {
+  function parseDictation(text, kids) {
+    var rows = [], info = kids.map(kidKeys), lastHM = '', nowT = nowHM(), tdy = today(), yst = N().prev(tdy);
+    String(text || '').split(/(?:[.!?;]+(?=\s|\p{Script=Cyrillic}|$)|\n+)/iu).forEach(function (c0) {
       var c = c0.trim(); if (!c) return;
-      var mm = findMention(norm(c), kids);
-      if (mm && mm.kid) {
-        cur = mm.kid.id;
+      var mm = findMention(norm(c), info);
+      if (mm) {
         c = (c.slice(0, mm.start).replace(/(?:^|\s)(?:у|по|для|на|ребенку|ребенка|ребёнку|ребёнка)\s*$/i, ' ') + ' ' + c.slice(mm.end).replace(/^[\s:,—–-]+/, '')).trim();
-      } else if (mm || unknownKidMention(c)) {
-        cur = ''; // ребёнок должен быть выбран вручную
       }
       var tm = TIME_RE.exec(c), hm = '';
       if (tm && +tm[1] <= 23 && +tm[2] <= 59) {
@@ -2207,20 +2213,18 @@ body.vopen { overflow: hidden; }
       c = c.replace(VERB_RE, '').replace(/^[\s,:—–-]+/, '').trim();
       if (!c && type !== 'adm') return;
       var use = hm || lastHM || nowT;
-      rows.push({ kid: cur, hm: use, date: toMin(use) > toMin(nowT) + 30 ? yst : tdy, type: type, text: c, on: true, guess: !hm });
+      rows.push({ kid: mm ? mm.kid.id : '', hm: use, date: toMin(use) > toMin(nowT) + 30 ? yst : tdy, type: type, text: c, on: true, guess: !hm });
     });
     return rows;
   }
-  var D = { text: '', def: '', rows: null };
+  var D = { text: '', rows: null };
   function openDictate(keep) {
-    if (!keep) D = { text: D.text || '', def: '', rows: null };
+    if (!keep) D = { text: D.text || '', rows: null };
     D.rows ? renderPreview() : renderDictInput();
   }
   function renderDictInput() {
-    var kids = kidsList();
     var html = '<div class="sl-h"><b>Диктовка</b><span><button type="button" class="sl-lnk" data-one>＋ Одно событие</button><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></span></div>' +
-      '<p class="meta">Нажмите микрофон на клавиатуре и говорите подряд. Называйте ребёнка (фамилию или номер бокса), время и что произошло. Пример: «Сидорова: в 13:50 поступил, апноэ. В 14:10 куросурф 2 флакона. Назначил адреналин 0,1 мкг/кг/мин. Петрова: в 15:00 ЭхоКГ, снижение сердечного выброса».</p>' +
-      '<p class="meta sl-l">Ребёнок по умолчанию (необязательно; лучше называть в каждой фразе)</p><div class="chips sl-kids">' + kids.map(function (k) { return kidChip(k, k.id === D.def); }).join('') + '</div>' +
+      '<p class="meta">Начинайте каждое событие с фамилии как в карточке или номера бокса. Например: «Сидорова: в 13:50 поступил, апноэ. Бокс 3: в 15:00 ЭхоКГ». Если метка не распознана однозначно, выберите ребёнка при проверке.</p>' +
       '<label class="f sl-f"><span>Что продиктовали</span><textarea class="ctext" id="dtText" rows="8" placeholder="Говорите или печатайте…">' + esc(D.text) + '</textarea></label>' +
       '<p class="pill warn" id="dtErr" hidden></p>' +
       '<div class="actions sl-act"><button type="button" class="btn pro-btn" id="dtParse">Разобрать</button><button type="button" class="btn ghost" id="dtLog">Лента смены</button></div>';
@@ -2230,11 +2234,10 @@ body.vopen { overflow: hidden; }
       var b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-close')) { closeSheet(); return; }
       if (b.hasAttribute('data-one')) { openAdd(); return; }
-      if (b.dataset.kid) { D.def = D.def === b.dataset.kid ? '' : b.dataset.kid; D.text = ta.value; renderDictInput(); return; }
       if (b.id === 'dtLog') { openLog(); return; }
       if (b.id === 'dtParse') {
         D.text = ta.value; var err = sh.querySelector('#dtErr');
-        D.rows = parseDictation(D.text, kidsList(), D.def);
+        D.rows = parseDictation(D.text, kidsList());
         if (!D.rows.length) { err.textContent = 'Не нашёл событий. Назовите ребёнка и что произошло.'; err.hidden = false; D.rows = null; return; }
         renderPreview();
       }
@@ -2254,7 +2257,7 @@ body.vopen { overflow: hidden; }
       rows.map(function (r, i) {
         return '<div class="dt-row card" data-i="' + i + '"><div class="dt-l1"><input type="checkbox" data-f="on"' + (r.on ? ' checked' : '') + '>' + kidSel(r.kid) + '</div>' +
           '<div class="dt-l2"><input type="time" data-f="hm" value="' + esc(r.hm) + '">' + typeSel(r.type) + '</div>' +
-          '<textarea data-f="text" rows="2" class="ctext">' + esc(r.text) + '</textarea>' + medFixHTML(r) +
+          '<textarea data-f="text" rows="2" class="ctext">' + esc(r.text) + '</textarea>' + '<div class="dt-fixes">' + medFixHTML(r) + '</div>' +
           (r.guess ? '<p class="meta dt-g">Время не называли, поставил ' + esc(r.hm) + '.</p>' : '') + '<div class="dt-h">' + rowHints(r) + '</div></div>';
       }).join('') + (rows.some(function (r) { return /ph-diff|ph-conflict/.test(rowHints(r)); }) ? '<p class="meta">Отличие от протокола можно обосновать после записи: в карточке ребёнка или в ленте смены (✎).</p>' : '') +
       '<details class="dt-raw"><summary>Исходная диктовка без исправлений</summary><p>' + esc(D.text) + '</p></details>' +
@@ -2265,7 +2268,13 @@ body.vopen { overflow: hidden; }
     var sync = function (el) {
       var row = el.closest('.dt-row'); if (!row) return; var r = rows[+row.dataset.i], f = el.dataset.f;
       if (f === 'on') r.on = el.checked; else if (f === 'kid') { r.kid = el.value; el.classList.toggle('dt-bad', !el.value); }
-      else if (f === 'hm') { if (el.value) { r.hm = el.value; r.guess = false; } } else r[f] = el.value;
+      else if (f === 'hm') { if (el.value) { r.hm = el.value; r.guess = false; } }
+      else if (f === 'text') {
+        if (r.text === el.value) return;
+        r.text = el.value;
+        row.querySelector('.dt-fixes').innerHTML = medFixHTML(r);
+      } else r[f] = el.value;
+      sh.querySelector('#dtConfirm').checked = false;
       if (f !== 'on') { clearTimeout(row._t); row._t = setTimeout(function () { row.querySelector('.dt-h').innerHTML = rowHints(r); }, 350); }
     };
     box.addEventListener('input', function (e) { if (e.target.dataset && e.target.dataset.f) sync(e.target); });
@@ -2290,12 +2299,13 @@ body.vopen { overflow: hidden; }
         var err = sh.querySelector('#dtErr'), on = rows.filter(function (r) { return r.on; });
         if (!on.length) { err.textContent = 'Ничего не выбрано.'; err.hidden = false; return; }
         if (!sh.querySelector('#dtConfirm').checked) { err.textContent = 'Подтвердите проверку пациентов, времени, препаратов и доз.'; err.hidden = false; return; }
-        var noKid = on.filter(function (r) { return !r.kid; }).length;
+        var activeKids = kidsList();
+        var noKid = on.filter(function (r) { return !activeKids.some(function (k) { return k.id === r.kid; }); }).length;
         if (noKid) { err.textContent = 'У ' + noKid + ' событий не выбран ребёнок.'; err.hidden = false; return; }
         var added = [];
         on.forEach(function (r) { var it = addEvent(r.kid, { date: r.date, hm: r.hm, type: r.type, text: r.text }); if (it) added.push({ kid: r.kid, id: it.id }); });
         var last = on[on.length - 1]; if (last) lsSet('kid', last.kid);
-        D = { text: '', def: D.def, rows: null }; closeSheet(); refresh();
+        D = { text: '', rows: null }; closeSheet(); refresh();
         toast('✓ Записано событий: ' + added.length, 'Отменить', function () { added.forEach(function (a) { delEvent(a.kid, a.id); }); refresh(); });
       }
     });
