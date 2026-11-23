@@ -2113,16 +2113,61 @@ body.vopen { overflow: hidden; }
   function findMention(low, kids) {
     var info = kids.map(function (k) { return { k: k, ky: kidKeys(k) }; }), best = null, re = /[а-я]{4,}/g, m;
     while ((m = re.exec(low))) {
-      for (var i = 0; i < info.length; i++) {
-        if (info[i].ky.keys.some(function (st) { return m[0].indexOf(st) === 0; })) { best = { kid: info[i].k, start: m.index, end: m.index + m[0].length }; break; }
-      }
-      if (best) break;
+      var matches = info.filter(function (x) { return x.ky.keys.some(function (st) { return m[0].indexOf(st) === 0; }); });
+      if (matches.length) { best = { kid: matches.length === 1 ? matches[0].k : null, start: m.index, end: m.index + m[0].length }; break; }
     }
     var val = null, st = 0, en = 0, nm = /(бокс|кувез|кювез|кроватк[а-я]*|место|койк[а-я]*)\s*(?:№|номер)?\s*(\d{1,2}|[а-я]+)/.exec(low);
     if (nm) { val = /^\d+$/.test(nm[2]) ? String(+nm[2]) : (NUMW[nm[2]] ? String(NUMW[nm[2]]) : null); st = nm.index; en = nm.index + nm[0].length; }
     if (!val) { var om = /([а-я]+)\s+(бокс|кувез|кювез)/.exec(low); if (om && NUMW[om[1]]) { val = String(NUMW[om[1]]); st = om.index; en = om.index + om[0].length; } }
-    if (val) { var kk = info.filter(function (x) { return x.ky.num === val; })[0]; if (kk && (!best || st < best.start)) best = { kid: kk.k, start: st, end: en }; }
+    if (nm || val) {
+      var matched = val ? info.filter(function (x) { return x.ky.num === val; }) : [];
+      if (!best || st < best.start) best = { kid: matched.length === 1 ? matched[0].k : null, start: st, end: en };
+    }
     return best;
+  }
+  // Неразборчивая фамилия или номер бокса не наследуют предыдущего ребёнка.
+  function unknownKidMention(s) {
+    var x = norm(s).trim();
+    if (/(^|[\s,:;])(?:бокс|кувез|кювез|койк[а-я]*|кроватк[а-я]*|ребен(?:ок|ка|ку)|палат[а-я]*)\b/.test(x)) return true;
+    return /^[а-я]{3,}(?:ова|овой|ева|евой|ина|иной|ов|ев|ин|ская|ской|ский)(?=[\s,:;—–-]|$)/.test(x);
+  }
+  // Словарь работает локально; исправление только по явному нажатию врача.
+  var MED_TERMS = ['Куросурф', 'Сурванта', 'сурфактант', 'добутамин', 'норадреналин',
+    'адреналин', 'меропенем', 'ванкомицин', 'амикацин', 'гентамицин', 'амоксициллин',
+    'пиперациллин', 'тазобактам', 'ибупрофен', 'Интрафен', 'дексаметазон',
+    'интубация', 'экстубация', 'эндотрахеально', 'сатурация',
+    'нейросонография', 'эхокардиография', 'гипогликемия'];
+  function medDistance(a, b) {
+    if (Math.abs(a.length - b.length) > 3) return 99;
+    var prev = [], cur = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur[0] = i;
+      for (j = 1; j <= b.length; j++) cur[j] = Math.min(cur[j - 1] + 1,
+        prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur; cur = [];
+    }
+    return prev[b.length];
+  }
+  function medSuggestions(s) {
+    var result = [], re = /[а-яё]{5,}/gi, m;
+    while ((m = re.exec(String(s || '')))) {
+      var w = norm(m[0]), options = MED_TERMS.map(function (v) {
+        var n = norm(v), dist = w[0] === n[0] ? medDistance(w, n) : 99;
+        return { to: v, dist: dist };
+      }).filter(function (x) { return x.dist > 0 && x.dist <= (w.length >= 10 ? 3 : 2); })
+        .sort(function (a, b) { return a.dist - b.dist; });
+      if (options.length && (!options[1] || options[0].dist < options[1].dist))
+        result.push({ from: m[0], to: options[0].to, at: m.index });
+    }
+    return result.slice(0, 8);
+  }
+  function medFixHTML(r) {
+    var a = medSuggestions(r.text);
+    return a.length ? '<p class="dt-fix">Возможные ошибки диктовки: ' +
+      a.map(function (x, i) { return '<button type="button" data-fix="' + i + '">«' +
+        esc(x.from) + '» → «' + esc(x.to) + '»</button>'; }).join(' ') +
+      ' <span class="meta">Только по нажатию.</span></p>' : '';
   }
   var TIME_RE = /(?:^|[\s(])(?:в\s+)?(\d{1,2}):(\d{2})(?!\d)/i;
   var VERB_RE = /^(?:назначил[аи]?|назначен[оаы]?|начал[аи]?|начат[оаы]?|подключил[аи]?|отменил[аи]?|отменен[оаы]?|поступил[аи]?|выполнил[аи]?|пров[её]л[аи]?|сделал[аи]?|вв[её]л[аи]?)(?![а-я])[\s,:—–-]*/i;
@@ -2141,13 +2186,15 @@ body.vopen { overflow: hidden; }
   ];
   var toMin = function (hm) { return +hm.slice(0, 2) * 60 + +hm.slice(3); };
   function parseDictation(text, kids, defId) {
-    var rows = [], cur = defId || '', lastHM = '', nowT = nowHM(), tdy = today(), yst = N().prev(tdy);
+    var rows = [], cur = kids.some(function (k) { return k.id === defId; }) ? defId : '', lastHM = '', nowT = nowHM(), tdy = today(), yst = N().prev(tdy);
     String(text || '').replace(/([.!?;])\s+/g, '$1\u0001').split(/\u0001|\n+/).forEach(function (c0) {
       var c = c0.trim(); if (!c) return;
       var mm = findMention(norm(c), kids);
-      if (mm) {
+      if (mm && mm.kid) {
         cur = mm.kid.id;
         c = (c.slice(0, mm.start).replace(/(?:^|\s)(?:у|по|для|на|ребенку|ребенка|ребёнку|ребёнка)\s*$/i, ' ') + ' ' + c.slice(mm.end).replace(/^[\s:,—–-]+/, '')).trim();
+      } else if (mm || unknownKidMention(c)) {
+        cur = ''; // ребёнок должен быть выбран вручную
       }
       var tm = TIME_RE.exec(c), hm = '';
       if (tm && +tm[1] <= 23 && +tm[2] <= 59) {
@@ -2166,14 +2213,14 @@ body.vopen { overflow: hidden; }
   }
   var D = { text: '', def: '', rows: null };
   function openDictate(keep) {
-    if (!keep) D = { text: D.text || '', def: lsGet('kid') || '', rows: null };
+    if (!keep) D = { text: D.text || '', def: '', rows: null };
     D.rows ? renderPreview() : renderDictInput();
   }
   function renderDictInput() {
     var kids = kidsList();
     var html = '<div class="sl-h"><b>Диктовка</b><span><button type="button" class="sl-lnk" data-one>＋ Одно событие</button><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></span></div>' +
       '<p class="meta">Нажмите микрофон на клавиатуре и говорите подряд. Называйте ребёнка (фамилию или номер бокса), время и что произошло. Пример: «Сидорова: в 13:50 поступил, апноэ. В 14:10 куросурф 2 флакона. Назначил адреналин 0,1 мкг/кг/мин. Петрова: в 15:00 ЭхоКГ, снижение сердечного выброса».</p>' +
-      '<p class="meta sl-l">Если ребёнка не назвали, это про</p><div class="chips sl-kids">' + kids.map(function (k) { return kidChip(k, k.id === D.def); }).join('') + '</div>' +
+      '<p class="meta sl-l">Ребёнок по умолчанию (необязательно; лучше называть в каждой фразе)</p><div class="chips sl-kids">' + kids.map(function (k) { return kidChip(k, k.id === D.def); }).join('') + '</div>' +
       '<label class="f sl-f"><span>Что продиктовали</span><textarea class="ctext" id="dtText" rows="8" placeholder="Говорите или печатайте…">' + esc(D.text) + '</textarea></label>' +
       '<p class="pill warn" id="dtErr" hidden></p>' +
       '<div class="actions sl-act"><button type="button" class="btn pro-btn" id="dtParse">Разобрать</button><button type="button" class="btn ghost" id="dtLog">Лента смены</button></div>';
@@ -2203,13 +2250,15 @@ body.vopen { overflow: hidden; }
     var typeSel = function (t) { return '<select data-f="type">' + TYPES.map(function (x) { return '<option value="' + x.k + '"' + (x.k === t ? ' selected' : '') + '>' + x.l + '</option>'; }).join('') + '</select>'; };
     var nKids = {}; rows.forEach(function (r) { if (r.kid) nKids[r.kid] = 1; });
     var html = '<div class="sl-h"><b>Проверьте разбор</b><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></div>' +
-      '<p class="meta">Событий: ' + rows.length + ', детей: ' + Object.keys(nKids).length + '. Проверьте ребёнка, время, тип и особенно дозы. Лишнее снимите галочкой.</p>' +
+      '<p class="meta">Событий: ' + rows.length + ', детей: ' + Object.keys(nKids).length + '. Проверьте ребёнка, время, тип и дозы. Неопределённые пациенты не сохраняются.</p>' +
       rows.map(function (r, i) {
         return '<div class="dt-row card" data-i="' + i + '"><div class="dt-l1"><input type="checkbox" data-f="on"' + (r.on ? ' checked' : '') + '>' + kidSel(r.kid) + '</div>' +
           '<div class="dt-l2"><input type="time" data-f="hm" value="' + esc(r.hm) + '">' + typeSel(r.type) + '</div>' +
-          '<textarea data-f="text" rows="2" class="ctext">' + esc(r.text) + '</textarea>' +
+          '<textarea data-f="text" rows="2" class="ctext">' + esc(r.text) + '</textarea>' + medFixHTML(r) +
           (r.guess ? '<p class="meta dt-g">Время не называли, поставил ' + esc(r.hm) + '.</p>' : '') + '<div class="dt-h">' + rowHints(r) + '</div></div>';
       }).join('') + (rows.some(function (r) { return /ph-diff|ph-conflict/.test(rowHints(r)); }) ? '<p class="meta">Отличие от протокола можно обосновать после записи: в карточке ребёнка или в ленте смены (✎).</p>' : '') +
+      '<details class="dt-raw"><summary>Исходная диктовка без исправлений</summary><p>' + esc(D.text) + '</p></details>' +
+      '<label class="dt-confirm"><input type="checkbox" id="dtConfirm"> Я проверил пациентов, время, препараты и дозировки</label>' +
       '<p class="pill warn" id="dtErr" hidden></p>' +
       '<div class="actions sl-act"><button type="button" class="btn pro-btn" id="dtSave">Записать выбранное</button><button type="button" class="btn ghost" id="dtBack">← Назад</button></div>';
     var sh = openSheet(html), box = sh.querySelector('.vbox');
@@ -2224,10 +2273,23 @@ body.vopen { overflow: hidden; }
     box.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-close')) { closeSheet(); return; }
+      if (b.dataset.fix != null) {
+        var row = b.closest('.dt-row'), r = rows[+row.dataset.i], suggestion = medSuggestions(r.text)[+b.dataset.fix];
+        if (suggestion) {
+          r.text = r.text.slice(0, suggestion.at) + suggestion.to + r.text.slice(suggestion.at + suggestion.from.length);
+          if (r.type === 'note') {
+            var lc = norm(r.text);
+            for (var j = 0; j < RULES.length; j++) if (RULES[j][1].test(lc)) { r.type = RULES[j][0]; break; }
+          }
+          renderPreview();
+        }
+        return;
+      }
       if (b.id === 'dtBack') { D.rows = null; renderDictInput(); return; }
       if (b.id === 'dtSave') {
         var err = sh.querySelector('#dtErr'), on = rows.filter(function (r) { return r.on; });
         if (!on.length) { err.textContent = 'Ничего не выбрано.'; err.hidden = false; return; }
+        if (!sh.querySelector('#dtConfirm').checked) { err.textContent = 'Подтвердите проверку пациентов, времени, препаратов и доз.'; err.hidden = false; return; }
         var noKid = on.filter(function (r) { return !r.kid; }).length;
         if (noKid) { err.textContent = 'У ' + noKid + ' событий не выбран ребёнок.'; err.hidden = false; return; }
         var added = [];
@@ -2270,7 +2332,7 @@ body.vopen { overflow: hidden; }
     '.sl-time{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:end;margin:6px 0 8px}.sl-act{position:sticky;bottom:0;background:var(--card);padding:10px 0 2px;gap:8px;flex-wrap:wrap}.sl-act .btn{flex:1 1 30%;text-align:center}' +
     '.sl-list{list-style:none;margin:0 0 6px;padding:0}.sl-row{padding:10px 0;border-top:1px solid var(--line)}.sl-r1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.sl-r1 b{font-family:var(--num);font-size:17px}.sl-kid{font-weight:600}.sl-type{font-size:12.5px;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:2px 9px}' +
     '.sl-btns{margin-left:auto}.sl-btns button{border:0;background:none;font-size:17px;padding:4px 8px;cursor:pointer}.sl-txt{margin-top:3px;line-height:1.45;overflow-wrap:anywhere}.sl-txt mark{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:0 3px}' +
-    '.sl-lnk{border:0;background:none;color:var(--accent);font:600 14px var(--font);padding:6px 8px;cursor:pointer}.dt-row{margin:8px 0;padding:10px}.dt-l1,.dt-l2{display:flex;gap:8px;align-items:center;margin-bottom:6px}.dt-l1 select{flex:1;min-width:0}.dt-l2 input{width:120px}.dt-l2 select{flex:1;min-width:0}.dt-row textarea{width:100%;box-sizing:border-box}.dt-row select,.dt-row input[type=time]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:var(--r-in);background:var(--card-2);color:var(--ink)}.dt-bad{border-color:var(--bad)!important;background:var(--bad-bg)!important}.dt-g{margin:4px 2px 0;font-size:12.5px}.dt-l1 input[type=checkbox]{width:22px;height:22px}.sl-h span{display:flex;align-items:center}.sl-hints{margin:4px 0 6px}.dt-h .ph{margin:6px 0 0;padding:6px 9px}.sl-gh{margin:14px 2px 2px;font-size:15px}.sl-arr{margin:8px 0}.sl-arr ol{margin:6px 0 0;padding-left:22px}.sl-by,.sl-shifts{margin:6px 0}';
+    '.sl-lnk{border:0;background:none;color:var(--accent);font:600 14px var(--font);padding:6px 8px;cursor:pointer}.dt-row{margin:8px 0;padding:10px}.dt-l1,.dt-l2{display:flex;gap:8px;align-items:center;margin-bottom:6px}.dt-l1 select{flex:1;min-width:0}.dt-l2 input{width:120px}.dt-l2 select{flex:1;min-width:0}.dt-row textarea{width:100%;box-sizing:border-box}.dt-row select,.dt-row input[type=time]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:var(--r-in);background:var(--card-2);color:var(--ink)}.dt-bad{border-color:var(--bad)!important;background:var(--bad-bg)!important}.dt-g{margin:4px 2px 0;font-size:12.5px}.dt-l1 input[type=checkbox]{width:22px;height:22px}.sl-h span{display:flex;align-items:center}.sl-hints{margin:4px 0 6px}.dt-h .ph{margin:6px 0 0;padding:6px 9px}.sl-gh{margin:14px 2px 2px;font-size:15px}.sl-arr{margin:8px 0}.sl-arr ol{margin:6px 0 0;padding-left:22px}.sl-by,.sl-shifts{margin:6px 0}.dt-fix{font-size:13px;margin:6px 0;color:var(--warn)}.dt-fix button{border:1px solid var(--line);border-radius:8px;padding:6px;margin:3px;background:var(--card-2);color:var(--ink);font:inherit}.dt-confirm{display:flex;align-items:flex-start;gap:8px;margin:12px 0;font-weight:600;font-size:13px}.dt-confirm input{width:20px;height:20px;flex:none}.dt-raw{margin:10px 0;font-size:13px}.dt-raw p{white-space:pre-wrap;overflow-wrap:anywhere}';
   document.head.appendChild(st);
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 80); }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', function () { setTimeout(tick, 150); });
