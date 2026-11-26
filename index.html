@@ -2242,7 +2242,7 @@ body.vopen { overflow: hidden; }
   /* ---------- кнопка «＋ Событие» ---------- */
   function fab() {
     var h = location.hash, pro = (h === '' || h === '#kids') ? !!document.querySelector('.pro-strip') : (/^#kid-/.test(h) || h === '#round');
-    var on = pro && N().kids && !document.getElementById('vsh') && !document.getElementById('ash') && !document.getElementById('slsh');
+    var on = pro && N().kids && !document.getElementById('vsh') && !document.getElementById('ash') && !document.getElementById('slsh') && !document.getElementById('exsh');
     var f = document.getElementById('slFab');
     if (!on) { if (f) f.remove(); return; }
     if (f) return;
@@ -2275,7 +2275,618 @@ body.vopen { overflow: hidden; }
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 80); }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', function () { setTimeout(tick, 150); });
   setTimeout(tick, 600);
-  window.__neoLog = { parse: parseDictation, dictate: openDictate, open: openAdd, log: openLog, add: addEvent, del: delEvent, edit: editEvent, sentence: sent, slotFor: slotFor, dayFor: dayFor, text: logText };
+  window.__neoLog = { find: function (t, kids) { return findMention(norm(t), kids || kidsList()); }, parse: parseDictation, dictate: openDictate, open: openAdd, log: openLog, add: addEvent, del: delEvent, edit: editEvent, sentence: sent, slotFor: slotFor, dayFor: dayFor, text: logText };
+})();
+</script>
+<script id="express">
+/* НеоДневник Pro — главный экран и экспресс-дневник.
+   Диктовка → разбор по разделам → вопросы кнопками → готовый дневник в выбранный интервал.
+   Карточка ОАП: значимость, «как в мире», дозы на текущую массу, обоснование в запись.
+   Решение всегда за врачом: в дневник ничего не уходит без нажатия. */
+(function () {
+  var N = function () { return window.__neo || {}; };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var norm = function (s) { return String(s || '').toLowerCase().replace(/ё/g, 'е'); };
+  var pad = function (x) { return ('0' + x).slice(-2); };
+  var nowHM = function () { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  var today = function () { return N().ae ? N().ae(Date.now()) : new Date().toISOString().slice(0, 10); };
+  var ddmm = function (d) { return d ? d.split('-').reverse().slice(0, 2).join('.') : ''; };
+  var dmy = function (d) { return d ? d.split('-').reverse().join('.') : ''; };
+  var num = function (s) { if (s == null || s === '') return null; var v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? null : v; };
+  var fmt = function (v, d) { if (v == null) return ''; var r = Math.round(v * Math.pow(10, d || 0)) / Math.pow(10, d || 0); return String(r).replace('.', ','); };
+  var cap = function (s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  var lsGet = function (k) { try { return localStorage.getItem('neo.ex.' + k); } catch (e) { return null; } };
+  var lsSet = function (k, v) { try { localStorage.setItem('neo.ex.' + k, v); } catch (e) { } };
+  var NA = 'не указано';
+
+  function kidsList() { return (N().kids() || []).filter(function (k) { return !k.out; }); }
+  function getKid(id) { return (N().kids() || []).find(function (k) { return k.id === id; }); }
+  function dol(k, date) { try { var v = N().G0(k, date); return v ? +v : null; } catch (e) { return null; } }
+  function slotFor(hm) { return window.__neoLog ? window.__neoLog.slotFor(hm) : (N().F0 || [])[0]; }
+
+  /* ================= ИСТОЧНИКИ ================= */
+  var SRC = {
+    kz: { f: '🇰🇿', c: 'Казахстан', d: 'Клинические протоколы МЗ РК', u: '' },
+    ru: { f: '🇷🇺', c: 'Россия', d: 'КР «Гемодинамически значимый артериальный проток у недоношенного новорождённого», РОН и АСПМ, 2026', u: 'https://medpoint.pro/article/gemodinamicheski-znachimii-arterialnii-protok-u-nedonoshennogo-novorozhdennogo-2420', s: 'КР РФ «ГЗФАП у недоношенного новорождённого» (2026)' },
+    us: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Report «Patent Ductus Arteriosus in Preterm Infants», Pediatrics 2025', u: 'https://doi.org/10.1542/peds.2025-071425', s: 'клинический отчёт AAP «Patent Ductus Arteriosus in Preterm Infants» (Pediatrics, 2025)' },
+    ca: { f: '🇨🇦', c: 'Канада', d: 'CPS Position Statement «Management of the PDA in preterm infants», Paediatr Child Health 2022', u: 'https://cps.ca/documents/position/patent-ductus-arteriosus', s: 'позиция Канадского общества педиатров (CPS, 2022)' },
+    eu: { f: '🇪🇺', c: 'Европа', d: 'European Consensus Guidelines on the Management of RDS: 2025, Neonatology 2026', u: 'https://doi.org/10.1159/000551062', s: 'Европейский консенсус по РДС (2025)' },
+    rct: { d: 'Laughon MM и др. The PDA Randomized Clinical Trial, JAMA 2025', u: 'https://doi.org/10.1001/jama.2025.23330', s: 'РКИ NICHD PDA Trial (JAMA, 2025)' },
+    elg: { s: 'алгоритм раннего скрининга ЭКН (Early Screening of ELGANS)' }
+  };
+
+  /* ================= РАЗБОР ДИКТОВКИ ================= */
+  var R = {
+    dol: [/(\d{1,3})\s*[-–]?\s*(?:е|ые|ие|ье|й)?\s*(?:сутки|суток|сут\.?|день жизни|дн[ея] жизни)/, /(?:день|сутки)\s+жизни\s*(\d{1,3})/],
+    w: [/(?:масса|вес|массой)\s*(?:тела\s*)?(?:сегодня\s*)?(\d{3,4})(?:\s*г(?:р|рамм)?)?/],
+    fio2: [/(?:fio2|fio₂|фио2|фио ?₂|фио два|фи о два|кислород[а-я]*)\s*[-–:]?\s*(\d{2,3})/],
+    spo2: [/(?:spo2|spo₂|сатурац[а-я]*|сат\.?|сао2)\s*[-–:]?\s*(\d{2,3})/],
+    hr: [/(?:чсс|пульс)\s*[-–:]?\s*(\d{2,3})/],
+    rr: [/(?:чд|частота дыхани[а-я]*)\s*[-–:]?\s*(\d{2,3})/],
+    t: [/(?:температур[а-я]*|(?:^|[^а-я])т)\s*[-–:]?\s*(3\d[.,]\d)/],
+    bp: [/(?:(?:^|[^а-я])ад|артериальн[а-я]* давлени[а-я]*)\s*[-–:]?\s*(\d{2,3}\s*\/\s*\d{2,3}(?:\s*\/\s*\d{2,3})?)/],
+    peep: [/(?:peep|пдкв|пэп)\s*[-–:]?\s*(\d{1,2}(?:[.,]\d)?)/],
+    pip: [/(?:\bpip|пик[а-я]* давлени[а-я]*)\s*[-–:]?\s*(\d{1,2})/],
+    map: [/(?:\bmap|(?:^|[^а-я])мап|средн[а-я]* давлени[а-я]*)\s*[-–:]?\s*(\d{1,2}(?:[.,]\d)?)/],
+    pda: [/(?:оап|открыт[а-я]* артериальн[а-я]* проток[а-я]*|артериальн[а-я]* проток[а-я]*|(?:^|[^а-я])пда(?![а-я])|\bpda\b)/],
+    pdaD: [/(?:оап|проток[а-я]*|пда|\bpda\b)[^.;]{0,40}?(\d(?:[.,]\d{1,2})?)\s*мм/],
+    lpao: [/(?:лп\s*\/\s*ао|лп\s*к\s*ао|лп на ао|la\s*\/\s*ao)\s*[-–:]?\s*(\d(?:[.,]\d{1,2})?)/]
+  };
+  var MODES = [
+    [/вч\s*ивл|вчо|вчосц|hfov|высокочастотн[а-я]*/, 'ВЧ ИВЛ', 'inv'],
+    [/ивл|a\/c|\bsimv\b|\bippv\b|\bpsv\b|интубирован[а-я]*|на аппарат[а-я]*/, 'ИВЛ', 'inv'],
+    [/nippv|ниппв|нипв|неинвазивн[а-я]* ивл|bipap|бипап|дуопап|duopap/, 'неинвазивная ИВЛ (NIPPV)', 'niv'],
+    [/cpap|сипап|сипэп|сепап|сипап[а-я]*/, 'CPAP', 'niv'],
+    [/hfnc|высокопоточн[а-я]*|канюл[а-я]*/, 'высокопоточные канюли', 'o2'],
+    [/самостоятельн[а-я]* дыш[а-я]*|самостоятельн[а-я]* дыхани[а-я]*|без респираторн[а-я]* поддержк[а-я]*|на воздухе|дышит сам/, 'самостоятельное дыхание', 'none'],
+    [/кислородн[а-я]* палатк[а-я]*|кислород через маску|потоков[а-я]* кислород/, 'дотация кислорода', 'o2']
+  ];
+  var ORDN = { 'перв': 1, 'втор': 2, 'трет': 3, 'четверт': 4, 'пят': 5, 'шест': 6, 'седьм': 7, 'восьм': 8, 'девят': 9, 'десят': 10, 'одиннадцат': 11, 'двенадцат': 12, 'тринадцат': 13, 'четырнадцат': 14, 'пятнадцат': 15, 'шестнадцат': 16, 'семнадцат': 17, 'восемнадцат': 18, 'девятнадцат': 19, 'двадцат': 20 };
+  var ORD = /(одиннадцат|двенадцат|тринадцат|четырнадцат|пятнадцат|шестнадцат|семнадцат|восемнадцат|девятнадцат|двадцат|перв|втор|трет|четверт|пят|шест|седьм|восьм|девят|десят)[а-я]*\s+(?:сутки|сут|день жизни|дн[яе] жизни)/;
+  function grab(low, list) { for (var i = 0; i < list.length; i++) { var m = list[i].exec(low); if (m) return m[1]; } return null; }
+  function phrase(low, re) { var m = re.exec(low); return m ? m[1].replace(/\s+/g, ' ').trim() : null; }
+
+  function parse(text, kid) {
+    var low = norm(text), o = { raw: text };
+    o.dol = num(grab(low, R.dol)); if (o.dol == null) { var om = ORD.exec(low); if (om) o.dol = ORDN[om[1]]; } o.w = num(grab(low, R.w));
+    o.fio2 = num(grab(low, R.fio2)); o.spo2 = num(grab(low, R.spo2)); o.hr = num(grab(low, R.hr)); o.rr = num(grab(low, R.rr));
+    o.t = grab(low, R.t); o.bp = (grab(low, R.bp) || '').replace(/\s+/g, '') || null;
+    o.peep = grab(low, R.peep); o.pip = grab(low, R.pip); o.map = grab(low, R.map);
+    if (o.fio2 && o.fio2 < 21) o.fio2 = null;
+    for (var i = 0; i < MODES.length; i++) if (MODES[i][0].test(low)) { o.mode = MODES[i][1]; o.modeK = MODES[i][2]; break; }
+    if (o.fio2 === 21 && !o.mode) { o.mode = 'самостоятельное дыхание'; o.modeK = 'none'; }
+    var st = /состояни[а-я]*\s+(?:ребенка\s+)?(крайне тяжел[а-я]*|тяжел[а-я]*|средн[а-я]*(?: степени)?(?: тяжести)?|удовлетворительн[а-я]*|стабильн[а-я]*)/.exec(low);
+    if (st) o.state = /крайне/.test(st[1]) ? 'крайне тяжёлое' : /средн/.test(st[1]) ? 'средней тяжести' : /тяж/.test(st[1]) ? 'тяжёлое' : /удовл/.test(st[1]) ? 'удовлетворительное' : 'стабильное';
+    o.abd = phrase(low, /живот[а-я]*\s+((?:не\s+)?(?:мягк|вздут|напряж|безболезн|болезн|доступ|увелич|умерен|плотн|запавш|ладьевид|выбуха)[а-я]*(?:(?:\s*,\s*|\s+и\s+|\s+)(?:не\s+)?(?:мягк|вздут|напряж|безболезн|болезн|доступ|увелич|умерен|плотн|пальпац)[а-я]*)*)/);
+    var fm = /(?:кормлени[а-я]*|энтеральн[а-я]*|питани[а-я]*|грудн[а-я]* молок[а-я]*|смес[а-я]*|сцеж[а-я]*)[^.;]{0,40}?(\d+(?:[.,]\d)?)\s*мл/.exec(low);
+    if (fm) o.feed = fm[1].replace('.', ',');
+    var ff = /(?:каждые|через)\s*(\d)\s*(?:ч|час)/.exec(low); if (ff) o.feedQ = ff[1];
+    var fw = fm ? low.slice(fm.index, fm.index + fm[0].length + 70) : (/(?:кормлени|энтеральн|усваива|переносит)[^]{0,70}/.exec(low) || [''])[0];
+    if (/не переносит|не усваива|застой|сбрасыва|по зонду сброс|рвот[а-я]*|срыгив[а-я]*|желудочн[а-я]* остат/.test(fw)) o.tol = 'no'; else if (/переносит|усваива|без остатк/.test(fw)) o.tol = 'yes';
+    if (/(?:кормлени[а-я]*|энтеральн[а-я]*)\s+не\s+(?:проводит|получа)|голод|энтерально не|нпо|ничего через рот/.test(low)) o.feed = '0';
+    var dm = /диурез[а-я]*\s*[-–:]?\s*(\d+(?:[.,]\d)?)\s*(?:мл\s*\/\s*кг\s*\/\s*ч|мл\/кг\/час|мл\/кг)/.exec(low);
+    if (dm) o.diur = dm[1].replace('.', ',') + ' мл/кг/ч';
+    else { var dw = /диурез[а-я]*\s+(адекватн[а-я]*|достаточн[а-я]*|сохран[а-я]*|снижен[а-я]*|олигури[а-я]*|норм[а-я]*|не было|отсутств[а-я]*)/.exec(low); if (dw) o.diur = /снижен|олиг/.test(dw[1]) ? 'снижен' : /не было|отсутств/.test(dw[1]) ? 'не было' : 'адекватный'; }
+    if (/стул[а-я]*\s+(?:не было|отсутств[а-я]*|нет)|стула не было|без стула/.test(low)) o.stool = 'не было';
+    else { var sm = /стул[а-я]*\s+(был[а-я]*|меконий[а-я]*|переходн[а-я]*|желт[а-я]*|кашиц[а-я]*|жидк[а-я]*|с примес[а-я]*[а-я ]*|после клизм[а-я]*)/.exec(low); if (sm) o.stool = /^был/.test(sm[1]) ? 'был' : sm[1]; }
+    // ОАП
+    if (R.pda[0].test(low) && !/оап\s+(?:нет|не выявлен|закрыт)|проток[а-я]*\s+(?:закрыт|не функционир)/.test(low)) {
+      var p = o.pda = { d: num(grab(low, R.pdaD)), lpao: num(grab(low, R.lpao)) };
+      if (/справа\s*налево|право\s*[-–]?\s*лев[а-я]*|(?:^|[^а-я])п\s*[-–>→]\s*л(?![а-я])/.test(low)) p.dir = 'rl';
+      else if (/двунаправ[а-я]*|бидирекц[а-я]*|перекрестн[а-я]*/.test(low)) p.dir = 'bi';
+      else if (/слева\s*направо|лево\s*[-–]?\s*прав[а-я]*|(?:^|[^а-я])л\s*[-–>→]\s*п(?![а-я])/.test(low)) p.dir = 'lr';
+      if (/реверс[а-я]*|ретроградн[а-я]*/.test(low)) p.diast = 'rev'; else if (/диастол[а-я]*[^.;]{0,30}(?:снижен|отсутств|нулев)/.test(low)) p.diast = 'low';
+    }
+    // остальное, что сказано, — отдельными фразами, чтобы ничего не потерять
+    o.kid = kid || null;
+    return o;
+  }
+  // фразы-события (назначения, процедуры) — для проверки по протоколам и для текста
+  var EVW = /назнач|начат|начал|ввел|введен|вводим|отмен|сурфактант|куросурф|порактант|ампицил|гентамиц|амоксиц|меропен|ванкомиц|пеницил|цефотакс|метронидаз|иммуноглобул|интубир|экстубир|переведен|переливан|трансфуз|пункц|катетер|ибупрофен|парацетамол|индометац|допамин|добутамин|адреналин|норадреналин|милринон|фуросемид|кофеин/;
+  function eventPhrases(text) {
+    return String(text || '').replace(/([.!?;])\s+/g, '$1\u0001').split(/\u0001|\n+/).map(function (x) { return x.trim().replace(/[.;]+$/, ''); }).filter(function (x) { return x && EVW.test(norm(x)) && !/(оап|проток)/.test(norm(x)); });
+  }
+
+  /* ================= ОАП: ОЦЕНКА И «КАК В МИРЕ» ================= */
+  var CI = [
+    ['sepsis', 'Нелеченый сепсис'], ['bleed', 'Кровотечение / коагулопатия'], ['ivh', 'ВЖК II–III с нарастанием'],
+    ['uo', 'Диурез < 0,6 мл/кг/ч за 8 ч'], ['cr', 'Креатинин ≥ 132 мкмоль/л'], ['plt', 'Тромбоциты < 60×10⁹/л'],
+    ['nec', 'Подозрение на НЭК / хирургию живота'], ['bili', 'Гипербилирубинемия, нужна ЗПК'], ['co', 'Сейчас аминогликозиды или системные стероиды']
+  ];
+  var CLIN = [['hypo', 'Гипотензия'], ['olig', 'Олигурия'], ['ino1', '1 инотроп/вазопрессор'], ['ino2', '2 и более'], ['feed', 'Непереносимость кормления'], ['hem', 'Лёгочное кровотечение']];
+
+  function pdaCtx(E) {
+    var k = E.kid ? getKid(E.kid) : null, p = E.pda;
+    var ga = k ? num(k.ga) : null, d = E.f.dol != null ? E.f.dol : (k ? dol(k, E.date) : null);
+    var w = num(E.f.w) || (k ? num(k.bw) : null);
+    var fio2 = num(E.f.fio2), mk = E.f.modeK;
+    var sev = null, why = [];
+    if (mk || fio2 != null || Object.keys(p.clin).length) {
+      sev = 1;
+      if (fio2 != null && fio2 >= 30) { sev = 2; why.push('FiO₂ ' + fio2 + '%'); }
+      if (mk === 'niv' && num(E.f.map) > 8) { sev = 2; why.push('неинвазивная ИВЛ, MAP > 8'); }
+      if (p.clin.olig) { sev = Math.max(sev, 2); why.push('олигурия'); }
+      if (p.clin.ino1) { sev = Math.max(sev, 2); why.push('1 инотроп'); }
+      if (fio2 != null && fio2 > 50) { sev = 3; why.push('FiO₂ > 50%'); }
+      if (mk === 'inv') { sev = 3; why.push('инвазивная ИВЛ'); }
+      if (p.clin.hem) { sev = 3; why.push('лёгочное кровотечение'); }
+      if (p.clin.ino2) { sev = 3; why.push('2 инотропа'); }
+    }
+    var dsev = p.d == null ? null : p.d < 1.5 ? 1 : p.d <= 2.5 ? 2 : 3;
+    var over = p.lpao == null ? null : p.lpao >= 1.5;
+    var hypo = p.diast ? (p.diast !== 'norm') : null;
+    var hs = null, miss = [];
+    if (p.dir && p.dir !== 'lr') hs = false;
+    else if (p.d != null && p.d <= 1.5) hs = false;
+    else {
+      if (p.d == null) miss.push('диаметр'); if (!p.dir) miss.push('направление сброса');
+      if (over == null) miss.push('ЛП/Ао'); if (hypo == null) miss.push('диастолический кровоток в аорте');
+      if (!miss.length) hs = !!(over && hypo);
+    }
+    var ci = Object.keys(p.ci).filter(function (x) { return p.ci[x]; });
+    return { k: k, ga: ga, dol: d, w: w, sev: sev, sevWhy: why, dsev: dsev, hs: hs, miss: miss, over: over, hypo: hypo, ci: ci, gate: p.gate || (p.dir && p.dir !== 'lr'), renal: ci.some(function (x) { return x === 'plt' || x === 'cr' || x === 'uo'; }) };
+  }
+  var SEV = ['', 'лёгкая', 'умеренная', 'тяжёлая'];
+
+  function world(c) {
+    var out = [], early = c.dol != null && c.dol < 14;
+    // Казахстан
+    out.push({ s: SRC.kz, v: 'Протокола нет', t: 'Отдельного клинического протокола МЗ РК по ОАП у недоношенных нет ни в базе «Антидефекта», ни в открытом поиске. Тактику решает врач или консилиум, обоснование со ссылкой на источник добавится в запись.' });
+    if (c.gate) {
+      out.push({ s: SRC.ru, v: 'Не закрывать', tone: 'bad', t: 'Абсолютное противопоказание к медикаментозному закрытию: проток-зависимый кровоток при ВПС, персистирующая лёгочная гипертензия.' });
+      out.push({ s: { f: '🌐', c: 'ELGANS', d: 'Early Screening of ELGANS — алгоритм из вашего материала по гемодинамике', u: '' }, v: 'Лечить причину', tone: 'bad', t: 'ЛГ — лёгочные вазодилататоры; дисфункция миокарда — инотропы; критический ВПС — простагландин E1, проток держат открытым.' });
+      return out;
+    }
+    // Россия
+    var ru;
+    if (c.hs === false && !(c.dsev >= 2)) ru = { v: 'Наблюдение', t: 'Критериям ГЗФАП не соответствует (нужны: диаметр > 1,5 мм, сброс слева направо, ≥ 1 признак перегрузки малого круга и ≥ 1 признак системной гипоперфузии). Медикаментозная профилактика не рекомендуется.' };
+    else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol < 3) ru = { v: 'Пока ждать', t: 'Медикаментозная профилактика не рекомендуется. При ≤ 26 нед ранняя целевая терапия возможна на 3–6-е сутки при тяжёлом или умеренном (с клиникой) ГЗФАП, по решению консилиума (B).' };
+    else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol <= 6) ru = { v: c.sev >= 2 || c.dsev === 3 ? 'Ранняя терапия по консилиуму' : 'Наблюдение', tone: c.sev >= 2 || c.dsev === 3 ? 'warn' : '', t: 'Срок < 26 нед, 3–6-е сутки: ранняя целевая терапия при тяжёлой или умеренной (с клиникой) степени — по решению консилиума (B). Препарат первой линии — ибупрофен (B).' };
+    else if (c.dol != null && c.dol <= 7) ru = { v: 'Выжидательная', t: 'После 26 нед в первые 7 суток медикаментозную терапию не назначают; при ≥ 28 нед — выжидательная тактика с ЭхоКГ в динамике.' };
+    else ru = { v: c.hs ? 'Симптоматическая терапия' : 'По ЭхоКГ', tone: c.hs ? 'warn' : '', t: 'После 7 суток при ГЗФАП: ибупрофен 10–5–5 мг/кг (A) или парацетамол 15 мг/кг каждые 6 ч, 3–7 сут (B). Курс прекращают, когда проток ≤ 1,5 мм (A). Если через 24 ч после курса ГЗФАП сохраняется — второй курс, препарат можно сменить.' };
+    ru.t += ' Без отёка лёгких фуросемид не рекомендуется (A).'; ru.s = SRC.ru; out.push(ru);
+    // США
+    out.push(early
+      ? { s: SRC.us, v: 'Выжидательная по умолчанию', t: 'Профилактика и рутинное закрытие до 2 недель не рекомендуются. При гемодинамически значимом ОАП ибупрофен или парацетамол — допустимый вариант. В РКИ NICHD (22–28 нед, JAMA 2025) смертность до 36 нед ПМВ: 4,1% при выжидательной тактике против 9,6% при лечении.' }
+      : { s: SRC.us, v: 'Можно закрывать', tone: c.hs ? 'warn' : '', t: 'Старше 2 недель медикаментозное закрытие гемодинамически значимого ОАП допустимо, ибупрофен предпочтительнее индометацина, не более двух курсов. Если не помогло — транскатетерное закрытие (≥ 700 г) или перевязка.' });
+    // Канада
+    var unstable = c.sev === 3, small = c.ga != null && c.ga < 26;
+    out.push({ s: SRC.ca, v: early ? (unstable && small ? 'Можно раньше' : 'Консервативно 1–2 нед') : 'Ибупрофен', tone: early && unstable && small ? 'warn' : '', t: (early ? (unstable && small ? 'Нестабильный ребёнок < 26 нед: с консервативной тактикой осторожно, можно рассмотреть более раннюю терапию. ' : 'Стабильным детям — консервативная тактика первые 1–2 недели (условная). ') : '') + 'Препарат выбора — ибупрофен (сильная); после 3–5 сут можно высокие дозы (осторожно < 26 нед). Лечение не начинают по одной клинике без ЭхоКГ. Жидкость не ограничивать < 120 мл/кг/сут; можно повысить ПДКВ; фуросемид допустим (условная).' });
+    // Европа
+    out.push({ s: SRC.eu, v: c.renal ? 'Парацетамол' : 'Любой из трёх', tone: c.renal ? 'warn' : '', t: 'Если выбрано медикаментозное закрытие: индометацин, ибупрофен и парацетамол сопоставимы (A2); парацетамол предпочтительнее при тромбоцитопении или нарушении функции почек (B2).' });
+    return out;
+  }
+  // расхождения между источниками — показываем честно
+  function disagree(c) {
+    var x = [];
+    x.push('Фуросемид: Россия — не применять без отёка лёгких; Канада — можно рассмотреть.');
+    if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) x.push('Ранняя терапия при < 26 нед: Россия допускает по консилиуму, США не рекомендуют рутинно до 2 недель.');
+    return x;
+  }
+  function doses(w) {
+    if (!w) return null; var kg = w / 1000;
+    return [
+      { id: 'ibu', n: 'Ибупрофен, стандартно', t: '10 мг/кг = <b>' + fmt(10 * kg, 1) + ' мг</b>, затем 5 мг/кг = <b>' + fmt(5 * kg, 1) + ' мг</b> через 24 и 48 ч', s: 'КР РФ 2026 (A), CPS 2022' },
+      { id: 'ibuh', n: 'Ибупрофен, высокие дозы', t: '15–20 мг/кг = <b>' + fmt(15 * kg, 1) + '–' + fmt(20 * kg, 1) + ' мг</b>, затем 7,5–10 мг/кг = <b>' + fmt(7.5 * kg, 1) + '–' + fmt(10 * kg, 1) + ' мг</b> через 24 и 48 ч', s: 'CPS 2022 (после 3–5 сут; осторожно < 26 нед)' },
+      { id: 'para', n: 'Парацетамол', t: '15 мг/кг = <b>' + fmt(15 * kg, 1) + ' мг</b> каждые 6 ч (60 мг/кг/сут = ' + fmt(60 * kg, 1) + ' мг), 3–7 сут', s: 'КР РФ 2026 (B)' }
+    ];
+  }
+  var TACT = [
+    ['wait', 'Выжидательная'], ['ibu', 'Ибупрофен'], ['para', 'Парацетамол'], ['cause', 'Лечить причину (ЛГ, миокард)'], ['surg', 'Кардиохирург']
+  ];
+  // что говорят источники о выбранной тактике: support — кто поддерживает, against — кто против в этой ситуации
+  function judge(t, c) {
+    var sup = [], ag = [];
+    var early = c.dol != null && c.dol < 14, ru7 = c.dol != null && c.dol <= 7 && !(c.ga != null && c.ga < 26 && c.dol >= 3);
+    if (t === 'wait') {
+      if (c.gate) ag.push('при ЛГ или проток-зависимом ВПС нужно лечить причину');
+      if (early) sup.push(SRC.us.s, SRC.ca.s); if (ru7 || c.hs === false) sup.push(SRC.ru.s); sup.push(SRC.rct.s);
+      if (!early && c.hs) ag.push('после 2 недель при ГЗФАП AAP допускает закрытие, КР РФ рекомендуют симптоматическую терапию');
+    } else if (t === 'ibu' || t === 'para') {
+      if (c.gate) ag.push('абсолютное противопоказание: ЛГ / проток-зависимый ВПС (КР РФ 2026)');
+      if (t === 'ibu' && c.ci.length) ag.push('есть противопоказания к ибупрофену по КР РФ 2026: ' + c.ci.map(function (x) { return CI.filter(function (y) { return y[0] === x; })[0][1].toLowerCase(); }).join(', '));
+      if (c.hs === false) ag.push('критериям ГЗФАП не соответствует');
+      else if (c.hs == null) ag.push('значимость не подтверждена: не хватает ' + c.miss.join(', '));
+      if (ru7 && c.hs !== false) ag.push('КР РФ: после 26 нед в первые 7 суток не назначают');
+      if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) ag.push('КР РФ: ранняя терапия при < 26 нед — по решению консилиума');
+      if (early) ag.push('AAP 2025: рутинное закрытие до 2 недель не рекомендовано');
+      sup.push(SRC.ru.s.replace('(2026)', t === 'ibu' ? '(2026, уровень A)' : '(2026, уровень B)'));
+      if (t === 'ibu') sup.push(SRC.ca.s); else sup.push(SRC.eu.s + (c.renal ? ' (B2)' : ' (A2)'));
+      if (!early) sup.push(SRC.us.s);
+    } else if (t === 'cause') { sup.push(SRC.elg.s, SRC.ru.s); }
+    else if (t === 'surg') { sup.push(SRC.ru.s, SRC.ca.s, SRC.us.s); if (early && !c.gate) ag.push('процедурное закрытие обычно после двух неэффективных курсов или при противопоказаниях'); }
+    // жёсткие — противоречат КР РФ или безопасности; мягкие — только расхождение с AAP/CPS
+    var hard = ag.filter(function (x) { return !/^AAP|^процедурное/.test(x); });
+    return { sup: sup, ag: ag, hard: hard };
+  }
+
+  /* ================= СБОРКА ТЕКСТА ================= */
+  function pdaText(E, c) {
+    var p = E.pda, parts = [];
+    var dir = { lr: 'слева направо', rl: 'справа налево', bi: 'двунаправленный' }[p.dir];
+    var echo = 'По данным ЭхоКГ: ОАП' + (p.d != null ? ' ' + fmt(p.d, 1) + ' мм' : '') + (dir ? ', сброс ' + dir : '') + (p.lpao != null ? ', ЛП/Ао ' + fmt(p.lpao, 2) : '') + (p.diast ? ', диастолический кровоток в нисходящей аорте ' + { norm: 'сохранён', low: 'снижен', rev: 'реверсивный' }[p.diast] : '') + '.';
+    parts.push(echo);
+    if (c.hs === true) parts.push('Проток гемодинамически значимый' + (c.sev ? ', клинически ' + SEV[c.sev] + ' степень' : '') + '.');
+    else if (c.hs === false && !c.gate) parts.push('Критериям гемодинамической значимости не соответствует.');
+    var w = c.w, kg = w ? w / 1000 : null, t = p.tact;
+    if (t === 'wait') parts.push('Выбрана выжидательная тактика: оптимизация респираторной терапии, контроль водного баланса, ЭхоКГ в динамике.');
+    if (t === 'ibu') parts.push('Начат курс ибупрофена: 10 мг/кг' + (kg ? ' (' + fmt(10 * kg, 1) + ' мг)' : '') + ', далее 5 мг/кг' + (kg ? ' (' + fmt(5 * kg, 1) + ' мг)' : '') + ' через 24 и 48 ч. Контроль диуреза, креатинина, тромбоцитов, ЭхоКГ после курса.');
+    if (t === 'para') parts.push('Начат курс парацетамола 15 мг/кг' + (kg ? ' (' + fmt(15 * kg, 1) + ' мг)' : '') + ' каждые 6 ч, 3–7 сут. Контроль печёночных проб, ЭхоКГ в динамике.');
+    if (t === 'cause') parts.push('Медикаментозное закрытие протока не показано, лечение направлено на причину' + (c.gate ? ' (лёгочная гипертензия / проток-зависимый кровоток)' : '') + '.');
+    if (t === 'surg') parts.push('Запрошена консультация кардиохирурга для решения вопроса о закрытии протока.');
+    if (t) {
+      var j = judge(t, c), line = 'Обоснование: отдельный протокол МЗ РК по ОАП у недоношенных отсутствует; тактика соответствует: ' + j.sup.join('; ') + '.';
+      if (j.ag.length && (p.why || '').trim()) line += ' Отличие от рекомендаций (' + j.ag.join('; ') + ') обосновано: ' + p.why.replace(/[.\s]+$/, '') + '.';
+      parts.push(line);
+    }
+    return parts.join(' ');
+  }
+  function build(E) {
+    var f = E.f, k = E.kid ? getKid(E.kid) : null, L = [];
+    var inv = f.modeK === 'inv';
+    L.push(dmy(E.date) + ' ' + E.slot);
+    L.push('ЧД – ' + (inv ? 'ИВЛ' : (f.rr != null ? f.rr + ' в мин' : NA)) + '   ЧСС – ' + (f.hr != null ? f.hr + ' в мин' : NA) + '   Т – ' + (f.t ? String(f.t).replace('.', ',') : NA) + '   SpO₂ – ' + (f.spo2 != null ? f.spo2 + '%' : NA) + '   АД – ' + (f.bp ? f.bp + ' мм рт. ст.' : NA));
+    var hd = [];
+    var d = f.dol != null ? f.dol : (k ? dol(k, E.date) : null);
+    if (d) hd.push(d + '-е сутки жизни'); if (k && k.ga) hd.push('ГВ ' + k.ga + ' нед');
+    if (f.w) hd.push('масса ' + f.w + ' г' + (k && num(k.bw) ? ' (при рождении ' + k.bw + ' г)' : ''));
+    var p = [];
+    if (hd.length) p.push(cap(hd.join(', ')) + '.');
+    p.push(f.state ? 'Состояние ребёнка ' + f.state + '.' : 'Состояние ребёнка: ' + NA + '.');
+    var resp;
+    if (!f.mode) resp = 'Респираторная поддержка: ' + NA;
+    else if (f.modeK === 'none') resp = 'Дышит самостоятельно' + (f.fio2 && f.fio2 > 21 ? ', FiO₂ ' + f.fio2 + '%' : '');
+    else {
+      var pr = []; if (f.pip) pr.push('PIP ' + f.pip); if (f.peep) pr.push('PEEP ' + String(f.peep).replace('.', ',')); if (f.map) pr.push('MAP ' + String(f.map).replace('.', ',')); if (f.fio2) pr.push('FiO₂ ' + f.fio2 + '%');
+      resp = 'Находится на ' + (f.modeK === 'inv' ? 'аппаратной ' : '') + 'респираторной поддержке: ' + f.mode + (pr.length ? ' с параметрами ' + pr.join(', ') : '');
+    }
+    p.push(resp + '.');
+    if (E.pda && E.pdaOn) p.push(pdaText(E, pdaCtx(E)));
+    var fe;
+    if (f.feed === '0') fe = 'Энтеральное питание не проводится';
+    else if (f.feed) fe = 'Энтеральное питание по ' + f.feed + ' мл' + (f.feedQ ? ' каждые ' + f.feedQ + ' ч' : '') + (f.tol === 'yes' ? ', усваивает' : f.tol === 'no' ? ', не усваивает (застой/срыгивания)' : '');
+    else fe = 'Энтеральное питание: ' + NA;
+    p.push(fe + '.');
+    p.push((f.abd ? 'Живот ' + f.abd : 'Живот: ' + NA) + '. ' + (f.diur === 'не было' ? 'Мочи не было' : f.diur ? 'Диурез ' + f.diur : 'Диурез: ' + NA) + '. ' + (f.stool === 'не было' ? 'Стула не было' : f.stool ? 'Стул ' + f.stool : 'Стул: ' + NA) + '.');
+    if (E.events.length) p.push(E.events.map(function (x) { return cap(x.replace(/[.\s]+$/, '')) + '.'; }).join(' '));
+    var jt = Object.keys(E.justs).length && window.__neoHints ? window.__neoHints.justText({ just: Object.keys(E.justs).map(function (r) { return E.justs[r]; }) }) : '';
+    if (jt) p.push(jt + '.');
+    if (E.extra && E.extra.trim()) p.push(E.extra.trim().replace(/([^.])$/, '$1.'));
+    L.push(''); L.push(p.join(' '));
+    return L.join('\n');
+  }
+
+  /* ================= ОКНО ================= */
+  var E = null;
+  function closeSheet() { var s = document.getElementById('exsh'); if (s) s.remove(); if (!document.getElementById('vsh') && !document.getElementById('slsh') && !document.getElementById('ash')) document.body.classList.remove('vopen'); }
+  function sheet(html) {
+    var s = document.getElementById('exsh');
+    if (!s) { s = document.createElement('div'); s.id = 'exsh'; s.className = 'vsheet'; s.addEventListener('click', function (e) { if (e.target === s) closeSheet(); }); document.body.appendChild(s); document.body.classList.add('vopen'); }
+    s.innerHTML = '<div class="vbox ex-box">' + html + '</div>';
+    s.querySelector('.vbox').scrollTop = 0;
+    return s;
+  }
+  var head = function (t, step) { return '<div class="ex-h"><b>' + t + '</b><span class="ex-step">' + step + '</span><button type="button" class="ex-x" data-close aria-label="Закрыть">✕</button></div>'; };
+  var chip = function (attr, val, label, on) { return '<button type="button" ' + attr + '="' + esc(val) + '"' + (on ? ' aria-pressed="true"' : '') + '>' + label + '</button>'; };
+
+  function open(o) {
+    o = o || {};
+    var tdy = today(), hm = nowHM();
+    E = { date: tdy, slot: slotFor(hm), kid: o.kid || '', auto: false, text: '', f: {}, pda: null, pdaOn: true, events: [], justs: {}, extra: '' };
+    if (!E.kid) { var last = lsGet('kid'); if (last && getKid(last) && kidsList().length > 1) E.kid = ''; else if (kidsList().length === 1) E.kid = kidsList()[0].id; }
+    stepInput();
+  }
+
+  function stepInput() {
+    var tdy = today(), yst = N().prev ? N().prev(tdy) : tdy, F0 = N().F0 || [], kids = kidsList();
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var html = head('⚡ Экспресс-дневник', '1 / 3') +
+      '<p class="meta ex-l">Когда</p><div class="chips">' + chip('data-date', tdy, 'Сегодня · ' + ddmm(tdy), E.date === tdy) + chip('data-date', yst, 'Вчера · ' + ddmm(yst), E.date === yst) +
+      '<label class="ex-dpick' + (E.date !== tdy && E.date !== yst ? ' on' : '') + '">📅 <input type="date" id="exDate" value="' + esc(E.date) + '"></label></div>' +
+      '<div class="chips ex-slots">' + F0.map(function (s) { return chip('data-slot', s, s, s === E.slot); }).join('') + '</div>' +
+      '<p class="meta ex-l">Кто' + (E.auto ? ' <span class="ex-auto">найден по диктовке</span>' : '') + '</p><div class="chips ex-kids">' + kids.map(function (k) { var d = dol(k, E.date); return chip('data-kid', k.id, esc(k.label || 'Ребёнок') + (d ? ' · ' + d + ' сут' : ''), k.id === E.kid); }).join('') + chip('data-kid', '-', 'Без карточки', E.kid === '-') + '</div>' +
+      '<p class="meta ex-l">Говорите, как удобно</p>' +
+      '<div class="ex-ta"><textarea id="exText" rows="7" class="ctext" placeholder="Кювез 5, пятые сутки, масса 1080, CPAP, PEEP 6, FiO₂ 25, сатурация 92, ЧСС 156. Живот мягкий, кормление по 4 мл каждые 3 часа, переносит. ЭхоКГ: ОАП 2,1 мм, сброс слева направо, ЛП/Ао 1,6.">' + esc(E.text) + '</textarea>' +
+      (SR ? '<button type="button" class="ex-mic" id="exMic" aria-label="Диктовать">🎙</button>' : '') + '</div>' +
+      '<p class="meta ex-tip">' + (SR ? 'Нажмите 🎙 и говорите. Можно и через микрофон на клавиатуре.' : 'Нажмите микрофон на клавиатуре и говорите.') + ' Фамилию или кювез можно назвать вслух.</p>' +
+      '<p class="pill warn" id="exErr" hidden></p>' +
+      '<div class="actions ex-act"><button type="button" class="btn pro-btn" id="exNext">Разобрать →</button></div>';
+    var sh = sheet(html), box = sh.querySelector('.vbox'), ta = box.querySelector('#exText');
+    ta.addEventListener('input', function () { E.text = ta.value; autoKid(); });
+    box.querySelector('#exDate').addEventListener('change', function (e) { if (e.target.value) { E.date = e.target.value; stepInput(); } });
+    var rec = null;
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) { if (rec) try { rec.stop(); } catch (x) { } closeSheet(); return; }
+      if (b.dataset.date) { E.date = b.dataset.date; stepInput(); return; }
+      if (b.dataset.slot) { E.slot = b.dataset.slot; box.querySelectorAll('[data-slot]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
+      if (b.dataset.kid) { E.kid = b.dataset.kid; E.auto = false; box.querySelectorAll('[data-kid]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
+      if (b.id === 'exMic') {
+        if (rec) { try { rec.stop(); } catch (x) { } return; }
+        try {
+          rec = new SR(); rec.lang = 'ru-RU'; rec.continuous = true; rec.interimResults = false;
+          var base = ta.value;
+          rec.onresult = function (ev) { var s = ''; for (var i = 0; i < ev.results.length; i++) s += ev.results[i][0].transcript + ' '; ta.value = (base ? base.replace(/\s*$/, ' ') : '') + s.trim(); E.text = ta.value; autoKid(); };
+          rec.onend = function () { rec = null; b.classList.remove('on'); };
+          rec.onerror = function () { rec = null; b.classList.remove('on'); };
+          rec.start(); b.classList.add('on');
+        } catch (x) { rec = null; }
+        return;
+      }
+      if (b.id === 'exNext') {
+        if (rec) try { rec.stop(); } catch (x) { }
+        if (!E.text.trim()) { var er = box.querySelector('#exErr'); er.textContent = 'Скажите или напишите хотя бы пару параметров.'; er.hidden = false; return; }
+        autoKid();
+        if (!E.kid) { var er2 = box.querySelector('#exErr'); er2.textContent = 'Кто это? Выберите ребёнка или «Без карточки».'; er2.hidden = false; return; }
+        runParse(); stepReview();
+      }
+    });
+    function autoKid() {
+      if (E.kid && !E.auto) return;
+      var m = window.__neoLog && window.__neoLog.find ? window.__neoLog.find(E.text) : null;
+      if (m && m.kid && m.kid.id !== E.kid) { E.kid = m.kid.id; E.auto = true; box.querySelectorAll('[data-kid]').forEach(function (x) { if (x.dataset.kid === E.kid) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); var l = box.querySelectorAll('.ex-l')[1]; if (l && !l.querySelector('.ex-auto')) l.insertAdjacentHTML('beforeend', ' <span class="ex-auto">найден по диктовке</span>'); }
+    }
+  }
+
+  function runParse() {
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
+    var f = parse(E.text, k);
+    E.f = f; E.pda = f.pda ? { d: f.pda.d, dir: f.pda.dir || '', lpao: f.pda.lpao, diast: f.pda.diast || '', clin: {}, ci: {}, gate: false, tact: '', why: '' } : null;
+    E.events = eventPhrases(E.text); E.justs = {};
+  }
+
+  /* ---------- шаг 2: как понял + вопросы ---------- */
+  var FIELDS = [
+    ['Состояние и витальные', [['state', 'Состояние', 'ch', ['крайне тяжёлое', 'тяжёлое', 'средней тяжести', 'удовлетворительное']], ['hr', 'ЧСС', 'n'], ['rr', 'ЧД', 'n'], ['spo2', 'SpO₂, %', 'n'], ['t', 'Т, °C', 't'], ['bp', 'АД', 't']]],
+    ['Дыхание', [['mode', 'Поддержка', 'ch', ['самостоятельное дыхание', 'CPAP', 'неинвазивная ИВЛ (NIPPV)', 'ИВЛ', 'ВЧ ИВЛ', 'высокопоточные канюли']], ['fio2', 'FiO₂, %', 'n'], ['peep', 'PEEP', 't'], ['pip', 'PIP', 't'], ['map', 'MAP', 't']]],
+    ['Питание и ЖКТ', [['feed', 'Кормление, мл', 't'], ['feedQ', 'Каждые, ч', 'n'], ['tol', 'Усваивает', 'ch', [['yes', 'да'], ['no', 'нет, застой']]], ['abd', 'Живот', 'ch', ['мягкий', 'мягкий, не вздут', 'вздут', 'напряжён']]]],
+    ['Выделение и масса', [['diur', 'Диурез', 'ch', ['адекватный', 'снижен', 'не было']], ['stool', 'Стул', 'ch', ['был', 'не было', 'меконий']], ['w', 'Масса, г', 'n'], ['dol', 'Сутки жизни', 'n']]]
+  ];
+  var MK = { 'самостоятельное дыхание': 'none', 'CPAP': 'niv', 'неинвазивная ИВЛ (NIPPV)': 'niv', 'ИВЛ': 'inv', 'ВЧ ИВЛ': 'inv', 'высокопоточные канюли': 'o2' };
+  function fieldHTML(fd) {
+    var key = fd[0], v = E.f[key], miss = v == null || v === '';
+    if (key === 'dol' && miss && E.kid !== '-') { var kk = getKid(E.kid); var dd = kk ? dol(kk, E.date) : null; if (dd) { v = dd; miss = false; } }
+    if (key === 'w' && miss) miss = false; // масса не обязательна
+    if (['pip', 'peep', 'map'].indexOf(key) >= 0 && (E.f.modeK === 'none' || E.f.modeK === 'o2' || !E.f.modeK)) return '';
+    if (key === 'rr' && E.f.modeK === 'inv') return '';
+    var h = '<div class="ex-fld' + (miss ? ' miss' : '') + '"><span class="ex-fl">' + fd[1] + '</span>';
+    if (fd[2] === 'ch') h += '<div class="chips ex-fc">' + fd[3].map(function (o) { var val = Array.isArray(o) ? o[0] : o, lab = Array.isArray(o) ? o[1] : o; return chip('data-set="' + key + '" data-v', val, esc(lab), String(v) === val); }).join('') + '</div>';
+    else h += '<input class="ex-in" data-in="' + key + '" inputmode="' + (fd[2] === 'n' ? 'decimal' : 'text') + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + (miss ? NA : '') + '">';
+    return h + '</div>';
+  }
+  function stepReview() {
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
+    var missN = 0; ['state', 'mode', 'abd', 'diur', 'stool', 'feed'].forEach(function (x) { if (E.f[x] == null || E.f[x] === '') missN++; });
+    var hints = []; var HN = window.__neoHints;
+    if (HN && k) E.events.forEach(function (t) { try { hints = hints.concat(HN.analyze(k, { type: 'rx', text: t, date: E.date, hm: nowHM() }) || []); } catch (x) { } });
+    var seen = {}; hints = hints.filter(function (h) { if (seen[h.rule]) return false; seen[h.rule] = 1; return true; });
+    E.hints = hints;
+    var html = head('Как я понял', '2 / 3') +
+      '<div class="ex-kid">' + (k ? '<b>' + esc(k.label) + '</b> · ' + (k.ga ? k.ga + ' нед · ' : '') + (k.bw ? 'при рождении ' + esc(k.bw) + ' г · ' : '') : '<b>Без карточки</b> · ') + dmy(E.date) + ' · ' + esc(E.slot) + '</div>' +
+      (missN ? '<p class="meta ex-miss">Не прозвучало: ' + missN + '. Отметьте кнопками — или оставьте, в дневнике будет «' + NA + '».</p>' : '') +
+      FIELDS.map(function (g) { return '<section class="card ex-sec"><h3>' + g[0] + '</h3>' + g[1].map(fieldHTML).join('') + '</section>'; }).join('') +
+      (E.pda ? pdaCard() : '') +
+      (E.events.length ? '<section class="card ex-sec"><h3>События и назначения</h3><ul class="ex-ev">' + E.events.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' + (hints.length && HN ? '<div id="exHints">' + HN.list(hints, { hideOk: false }) + '</div>' : '') + '</section>' : '') +
+      '<section class="card ex-sec"><h3>Добавить своими словами</h3><textarea id="exExtra" rows="2" class="ctext" placeholder="Например: неврологический статус, план обследования">' + esc(E.extra) + '</textarea></section>' +
+      '<div class="actions ex-act"><button type="button" class="btn pro-btn" id="exBuild">Собрать дневник →</button><button type="button" class="btn ghost" id="exBack">← Диктовка</button></div>';
+    var sh = sheet(html), box = sh.querySelector('.vbox');
+    if (HN && hints.length) { var hb = box.querySelector('#exHints'); if (hb) HN.bind(hb, function () { return E.hints; }, E, function () { hb.innerHTML = HN.list(E.hints, { hideOk: false }); markJust(hb); }); markJust(hb); }
+    box.addEventListener('input', function (e) {
+      var t = e.target;
+      if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ'].indexOf(key) >= 0 ? num(v) : v); t.closest('.ex-fld').classList.toggle('miss', v === ''); if (E.pda && (key === 'fio2' || key === 'map' || key === 'w' || key === 'dol')) redrawPda(box); }
+      if (t.id === 'exExtra') E.extra = t.value;
+      if (t.dataset.p) { E.pda[t.dataset.p] = num(t.value); redrawPda(box, t.dataset.p); }
+      if (t.id === 'exWhy') { E.pda.why = t.value; }
+    });
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) { closeSheet(); return; }
+      if (b.dataset.set) {
+        var key = b.dataset.set, val = b.dataset.v, cur = String(E.f[key]);
+        E.f[key] = cur === val ? null : val; if (key === 'mode') E.f.modeK = E.f.mode ? MK[E.f.mode] : null;
+        if (key === 'mode') { stepReview(); return; }
+        b.parentNode.querySelectorAll('button').forEach(function (x) { if (x === b && E.f[key] != null) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); });
+        b.closest('.ex-fld').classList.toggle('miss', E.f[key] == null);
+        if (E.pda) redrawPda(box); return;
+      }
+      if (b.dataset.pset) { var k2 = b.dataset.pset, v2 = b.dataset.v; E.pda[k2] = E.pda[k2] === v2 ? '' : v2; redrawPda(box); return; }
+      if (b.dataset.pclin) { E.pda.clin[b.dataset.pclin] = !E.pda.clin[b.dataset.pclin]; redrawPda(box); return; }
+      if (b.dataset.pci) { E.pda.ci[b.dataset.pci] = !E.pda.ci[b.dataset.pci]; redrawPda(box); return; }
+      if (b.dataset.pgate != null) { E.pda.gate = !E.pda.gate; redrawPda(box); return; }
+      if (b.dataset.tact) { E.pda.tact = E.pda.tact === b.dataset.tact ? '' : b.dataset.tact; redrawPda(box); return; }
+      if (b.id === 'exPdaOff') { E.pdaOn = !E.pdaOn; b.textContent = E.pdaOn ? 'Не включать в дневник' : 'Включить в дневник'; box.querySelector('.ex-pda').classList.toggle('off', !E.pdaOn); return; }
+      if (b.id === 'exBack') { stepInput(); return; }
+      if (b.id === 'exBuild') {
+        if (E.pda && E.pdaOn && E.pda.tact) { var j = judge(E.pda.tact, pdaCtx(E)); if (j.hard.length && !(E.pda.why || '').trim()) { var w = box.querySelector('#exWhy'); if (w) { w.focus(); w.classList.add('dt-bad'); w.scrollIntoView({ block: 'center' }); } return; } }
+        stepResult();
+      }
+    });
+  }
+  function markJust(hb) { if (!hb) return; hb.querySelectorAll('.ph').forEach(function (el) { if (E.justs[el.dataset.rule]) el.classList.add('ph-done'); }); }
+
+  /* ---------- карточка ОАП ---------- */
+  function pdaCard() { return '<section class="card ex-sec ex-pda' + (E.pdaOn ? '' : ' off') + '" id="exPda">' + pdaInner() + '</section>'; }
+  function redrawPda(box, focusKey) {
+    var el = box.querySelector('#exPda'); if (!el) return;
+    var pos = focusKey ? (box.querySelector('[data-p="' + focusKey + '"]') || {}).selectionStart : null;
+    el.innerHTML = pdaInner();
+    if (focusKey) { var inp = el.querySelector('[data-p="' + focusKey + '"]'); if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch (x) { } } }
+  }
+  function pdaInner() {
+    var p = E.pda, c = pdaCtx(E), w = world(c), ds = doses(c.w), dis = disagree(c);
+    var status = c.gate ? '<span class="ex-tag bad">Не закрывать</span>' : c.hs === true ? '<span class="ex-tag warn">ГЗФАП' + (c.sev ? ' · ' + SEV[c.sev] : '') + '</span>' : c.hs === false ? '<span class="ex-tag ok">Не значимый</span>' : '<span class="ex-tag">Значимость не ясна</span>';
+    var h = '<div class="ex-ph"><h3>❤️ ОАП — решение</h3>' + status + '</div>' +
+      '<p class="meta">' + [c.ga ? c.ga + ' нед' : 'срок не указан в карточке', c.dol ? c.dol + '-е сутки' : 'сутки не указаны', c.w ? 'масса ' + c.w + ' г' : 'масса не указана'].join(' · ') + '</p>' +
+      '<div class="ex-grid"><label>Диаметр, мм<input class="ex-in" data-p="d" inputmode="decimal" value="' + (p.d == null ? '' : fmt(p.d, 2)) + '"></label><label>ЛП/Ао<input class="ex-in" data-p="lpao" inputmode="decimal" value="' + (p.lpao == null ? '' : fmt(p.lpao, 2)) + '"></label></div>' +
+      '<p class="meta ex-l">Сброс</p><div class="chips">' + [['lr', 'слева направо'], ['bi', 'двунаправленный'], ['rl', 'справа налево']].map(function (x) { return chip('data-pset="dir" data-v', x[0], x[1], p.dir === x[0]); }).join('') + '</div>' +
+      '<p class="meta ex-l">Диастолический кровоток в нисходящей аорте</p><div class="chips">' + [['norm', 'сохранён'], ['low', 'снижен / нулевой'], ['rev', 'реверсивный']].map(function (x) { return chip('data-pset="diast" data-v', x[0], x[1], p.diast === x[0]); }).join('') + '</div>' +
+      '<p class="meta ex-l">Клиника</p><div class="chips">' + CLIN.map(function (x) { return chip('data-pclin', x[0], x[1], p.clin[x[0]]); }).join('') + '</div>' +
+      '<div class="chips ex-gate">' + chip('data-pgate', '1', '⚠ ЛГ или подозрение на проток-зависимый ВПС', p.gate) + '</div>';
+    // оценка
+    var ev = [];
+    if (c.dsev) ev.push('По диаметру: ' + SEV[c.dsev] + ' (< 1,5 / 1,5–2,5 / > 2,5 мм).');
+    if (c.sev) ev.push('Клинически: ' + SEV[c.sev] + (c.sevWhy.length ? ' — ' + c.sevWhy.join(', ') : '') + '.');
+    if (c.hs == null && !c.gate && c.miss.length) ev.push('Для вывода о значимости не хватает: ' + c.miss.join(', ') + '.');
+    if (c.hs === true) ev.push('ГЗФАП по КР РФ: диаметр > 1,5 мм, сброс слева направо, перегрузка малого круга (ЛП/Ао ≥ 1,5) и системная гипоперфузия.');
+    h += '<div class="ex-eval">' + ev.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<p class="ex-src">Градации — КР РФ 2026; критерии значимости не едины, решение по совокупности ЭхоКГ и клиники.</p></div>';
+    // мир
+    h += '<h4 class="ex-wh">🌍 Как в мире</h4><ul class="ex-world">' + w.map(function (r) {
+      return '<li><div class="ex-wr"><span class="ex-flag">' + r.s.f + '</span><b>' + esc(r.s.c) + '</b><span class="ex-tag ' + (r.tone || '') + '">' + esc(r.v) + '</span></div><p>' + esc(r.t) + '</p>' +
+        (r.s.u ? '<a class="ex-src" href="' + esc(r.s.u) + '" target="_blank" rel="noopener">' + esc(r.s.d) + ' ↗</a>' : '<span class="ex-src">' + esc(r.s.d) + '</span>') + '</li>';
+    }).join('') + '</ul>' + (dis.length ? '<div class="ex-dis"><b>Где источники расходятся</b>' + dis.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '</div>' : '');
+    if (!c.gate) {
+      h += '<p class="meta ex-l">Противопоказания к ибупрофену (КР РФ 2026)</p><div class="chips ex-ci">' + CI.map(function (x) { return chip('data-pci', x[0], x[1], p.ci[x[0]]); }).join('') + '</div>';
+      h += '<h4 class="ex-wh">💊 Дозы на ' + (c.w ? 'массу ' + c.w + ' г' : '—') + '</h4>' + (ds ? '<ul class="ex-dose">' + ds.map(function (d) {
+        var bad = (d.id !== 'para' && c.ci.length), note = d.id === 'ibuh' && c.ga != null && c.ga < 26;
+        return '<li class="' + (bad ? 'no' : '') + '"><b>' + d.n + '</b>' + (bad ? ' <span class="ex-tag bad">противопоказан</span>' : '') + (note ? ' <span class="ex-tag warn">< 26 нед — осторожно</span>' : '') + '<p>' + d.t + '</p><span class="ex-src">' + esc(d.s) + '</span></li>';
+      }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : '<p class="meta">Укажите массу — посчитаю дозы.</p>');
+    }
+    // тактика
+    h += '<h4 class="ex-wh">Ваше решение</h4><div class="chips ex-tact">' + TACT.map(function (t) { return chip('data-tact', t[0], t[1], p.tact === t[0]); }).join('') + '</div>';
+    if (p.tact) {
+      var j = judge(p.tact, c);
+      if (j.sup.length) h += '<p class="ex-sup">✓ Опора: ' + esc(j.sup.join('; ')) + '</p>';
+      if (j.ag.length) h += '<div class="ex-ag"><b>⚠ ' + (j.hard.length ? 'Отличие от рекомендаций — нужна причина' : 'Расхождение с частью источников') + '</b>' + j.ag.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<textarea id="exWhy" rows="2" class="ctext" placeholder="' + (j.hard.length ? 'Обязательно' : 'По желанию') + ': почему так — например, решение консилиума, нарастание FiO₂ до 45%, олигурия">' + esc(p.why) + '</textarea></div>';
+      h += '<p class="meta">В дневник:</p><blockquote class="ex-q">' + esc(pdaText(E, c)) + '</blockquote>';
+    }
+    h += '<div class="actions"><button type="button" class="btn ghost" id="exPdaOff">' + (E.pdaOn ? 'Не включать в дневник' : 'Включить в дневник') + '</button></div>';
+    return h;
+  }
+
+  /* ---------- шаг 3: готовый дневник ---------- */
+  function stepResult() {
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
+    var txt = build(E), nNA = (txt.match(new RegExp(NA, 'g')) || []).length;
+    var F0 = N().F0 || [], first = E.slot === F0[0];
+    var cur = '';
+    if (k && k.days && k.days[E.date]) { var e = k.days[E.date]; cur = first ? (e.note || '') : ((e.slotNote || {})[E.slot] || ''); }
+    var chk = [];
+    if (nNA) chk.push(['warn', '«' + NA + '» — ' + nNA + ' раз. Эксперт увидит пробел; лучше дополнить.']);
+    if (E.pda && E.pdaOn) {
+      var c = pdaCtx(E);
+      if (!E.pda.tact) chk.push(['warn', 'ОАП: тактика не выбрана — в записи будет только описание ЭхоКГ.']);
+      else { var j = judge(E.pda.tact, c); chk.push(j.ag.length ? ((E.pda.why || '').trim() ? ['ok', 'ОАП: отличие от рекомендаций обосновано в записи.'] : ['warn', 'ОАП: расхождение (' + j.ag.join('; ') + '), причина не указана.']) : ['ok', 'ОАП: обоснование со ссылкой на источники в записи.']); }
+    }
+    var un = (E.hints || []).filter(function (h) { return (h.st === 'diff' || h.st === 'conflict') && !E.justs[h.rule]; });
+    if (un.length) chk.push(['bad', 'По протоколам РК без обоснования: ' + un.map(function (h) { return h.title; }).join('; ') + '. Вернитесь на шаг 2 и нажмите «Обосновать».']);
+    if (!chk.length) chk.push(['ok', 'Замечаний нет.']);
+    var html = head('Дневник готов', '3 / 3') +
+      '<p class="meta">' + (k ? esc(k.label) + ' · ' : '') + dmy(E.date) + ' · интервал ' + esc(E.slot) + '</p>' +
+      '<textarea id="exOut" rows="14" class="ctext ex-out">' + esc(txt) + '</textarea>' +
+      '<div class="card ex-check"><b>🛡 Проверка «Антидефекта»</b>' + chk.map(function (x) { return '<p class="ex-c ' + x[0] + '">' + esc(x[1]) + '</p>'; }).join('') + '</div>' +
+      (k && cur ? '<p class="meta ex-l">В этом интервале уже есть запись</p><div class="chips">' + chip('data-mode', 'add', 'Добавить ниже', E.mode !== 'rep') + chip('data-mode', 'rep', 'Заменить', E.mode === 'rep') + '</div>' : '') +
+      '<div class="actions ex-act">' + (k ? '<button type="button" class="btn pro-btn" id="exSave">Записать в дневник</button>' : '') + '<button type="button" class="btn ' + (k ? 'ghost' : 'pro-btn') + '" id="exCopy">Копировать</button><button type="button" class="btn ghost" id="exBack2">← Исправить</button></div>';
+    var sh = sheet(html), box = sh.querySelector('.vbox');
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) { closeSheet(); return; }
+      if (b.dataset.mode) { E.mode = b.dataset.mode; box.querySelectorAll('[data-mode]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
+      if (b.id === 'exBack2') { stepReview(); return; }
+      var out = box.querySelector('#exOut').value;
+      if (b.id === 'exCopy') { copy(out); b.textContent = '✓ Скопировано'; return; }
+      if (b.id === 'exSave') {
+        var body = out.replace(/^.*\n/, '').replace(/^\n/, ''); // строку «дата интервал» не пишем: интервал и так подписан в дневнике
+        var kk = getKid(E.kid); kk.days = kk.days || {}; var ee = kk.days[E.date] || (kk.days[E.date] = {});
+        var prev = first ? (ee.note || '') : ((ee.slotNote || {})[E.slot] || '');
+        var val = prev && E.mode !== 'rep' ? prev.replace(/\s+$/, '') + '\n\n' + body : body;
+        if (first) ee.note = val; else { ee.slotNote = ee.slotNote || {}; ee.slotNote[E.slot] = val; }
+        N().save(kk); lsSet('kid', kk.id);
+        closeSheet(); try { if (N().rerender) N().rerender(); } catch (x) { }
+        toast('✓ ' + esc(kk.label) + ': дневник ' + ddmm(E.date) + ' ' + esc(E.slot), 'Отменить', function () {
+          var k3 = getKid(kk.id), e3 = k3.days[E.date] || (k3.days[E.date] = {});
+          if (first) { if (prev) e3.note = prev; else delete e3.note; } else { e3.slotNote = e3.slotNote || {}; if (prev) e3.slotNote[E.slot] = prev; else delete e3.slotNote[E.slot]; }
+          N().save(k3); try { N().rerender(); } catch (x) { }
+        });
+      }
+    });
+  }
+  function copy(t) {
+    try { navigator.clipboard.writeText(t); return; } catch (e) { }
+    var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) { } a.remove();
+  }
+  function toast(msg, undoLabel, undo) {
+    var old = document.querySelector('.vundo.ex'); if (old) old.remove();
+    var t = document.createElement('div'); t.className = 'vundo ex';
+    t.innerHTML = '<span>' + msg + '</span>' + (undo ? '<button type="button">' + undoLabel + '</button>' : '');
+    if (undo) t.querySelector('button').onclick = function () { undo(); t.remove(); };
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 7000);
+  }
+
+  /* ================= ГЛАВНЫЙ ЭКРАН ================= */
+  function home() {
+    if (location.hash !== '#kids' && location.hash !== '') return;
+    var strip = document.querySelector('.pro-strip'); if (!strip || document.getElementById('exHome')) return;
+    var n = kidsList().length, tdy = today(), done = 0;
+    kidsList().forEach(function (k) { var e = k.days && k.days[tdy]; if (e && (e.note || (e.slotNote && Object.keys(e.slotNote).length))) done++; });
+    var hb = document.createElement('div'); hb.id = 'exHome'; hb.className = 'ex-home';
+    hb.innerHTML =
+      '<button type="button" class="ex-tile t2" id="exTExp"><span class="ex-ti">⚡</span><b>Экспресс-дневник</b><small>любой ребёнок, любой день — сразу диктовка</small></button>' +
+      '<button type="button" class="ex-tile t1" id="exTKids"><span class="ex-ti">👶</span><b>Мои дети</b><small>' + n + ' в отделении · дневник сегодня: ' + done + ' из ' + n + '</small></button>' +
+      '<button type="button" class="ex-tile t3" id="exTNew"><span class="ex-ti">＋</span><b>Поступил ребёнок</b><small>роды, анамнез, первичный осмотр</small></button>';
+    strip.parentNode.insertBefore(hb, strip.nextSibling);
+    // остальные кнопки — в «Инструменты смены», ничего не удаляем
+    var tools = document.createElement('details'); tools.id = 'exTools'; tools.className = 'card csec';
+    tools.innerHTML = '<summary><b>🧰 Инструменты смены</b> <span class="meta">обход, диктовка по детям, события, лента</span></summary>';
+    if (lsGet('tools') === '1') tools.open = true;
+    tools.addEventListener('toggle', function () { lsSet('tools', tools.open ? '1' : '0'); });
+    hb.parentNode.insertBefore(tools, hb.nextSibling);
+    hb.querySelector('#exTExp').onclick = function () { open(); };
+    hb.querySelector('#exTKids').onclick = function () { var l = document.querySelector('.list .kidrow'); if (l) l.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    hb.querySelector('#exTNew').onclick = function () {
+      var d = Array.prototype.filter.call(document.querySelectorAll('details.csec'), function (x) { return /Поступил ребёнок/.test((x.querySelector('summary') || {}).textContent || ''); })[0];
+      if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); var i = d.querySelector('input'); if (i) setTimeout(function () { i.focus(); }, 400); }
+    };
+  }
+  function tuck() {
+    var tools = document.getElementById('exTools'); if (!tools) return;
+    ['rdLink', 'slLink'].forEach(function (id) { var el = document.getElementById(id); if (el && el.parentNode !== tools) tools.appendChild(el); });
+  }
+  function kidBtn() {
+    var m = /^#kid-(.+)$/.exec(location.hash); if (!m || document.getElementById('exKidBtn')) return;
+    var h1 = document.querySelector('main h1, #app h1, h1'); if (!h1) return;
+    var b = document.createElement('button'); b.type = 'button'; b.id = 'exKidBtn'; b.className = 'btn pro-btn ex-kidbtn'; b.textContent = '⚡ Экспресс-дневник';
+    b.onclick = function () { open({ kid: decodeURIComponent(m[1]) }); };
+    h1.parentNode.insertBefore(b, h1.nextSibling);
+  }
+  function tick() { home(); tuck(); kidBtn(); }
+
+  var st = document.createElement('style');
+  st.textContent =
+    '.ex-home{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}' +
+    '.ex-tile{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;border:0;border-radius:18px;padding:16px 14px;cursor:pointer;font:inherit;color:var(--ink);background:var(--card);box-shadow:0 1px 0 var(--line),0 6px 18px rgba(15,35,60,.08);min-height:104px}' +
+    '.ex-tile b{font-size:17px;line-height:1.2}.ex-tile small{font-size:12.5px;color:var(--muted);line-height:1.3}.ex-ti{font-size:24px;line-height:1;margin-bottom:4px}' +
+    '.ex-tile.t2{grid-column:1/-1;min-height:116px;background:linear-gradient(135deg,#0e5e66,#13808a);color:#fff}.ex-tile.t2 small{color:rgba(255,255,255,.85)}.ex-tile.t2 b{font-size:20px}' +
+    '.ex-tile:active{transform:scale(.98)}#exTools summary{flex-wrap:wrap}#exTools summary b{flex:1}#exTools summary .meta{display:block;width:100%;order:3;font-size:12.5px;font-weight:400;margin-top:2px}#exTools .rd-links{margin:10px 0 2px}' +
+    '.ex-kidbtn{width:100%;margin:6px 0 10px}' +
+    '.ex-box{padding-bottom:calc(18px + env(safe-area-inset-bottom))}.ex-h{display:flex;align-items:center;gap:8px;font-size:18px;margin-bottom:4px}.ex-h b{flex:1}.ex-step{font-size:12.5px;color:var(--muted)}.ex-x{border:0;background:none;font-size:20px;color:var(--muted);padding:6px 10px;cursor:pointer}' +
+    '.ex-l{margin:12px 2px 6px}.ex-auto{color:var(--accent);font-weight:600}.ex-slots{margin-top:6px}.ex-slots button{font-size:13px}' +
+    '.ex-dpick{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;font-size:13px}.ex-dpick.on{border-color:var(--accent);background:var(--accent-soft)}.ex-dpick input{border:0;background:none;font:inherit;color:var(--ink);width:118px}' +
+    '.ex-ta{position:relative}.ex-ta textarea{width:100%;box-sizing:border-box;font-size:16px;line-height:1.45;padding-right:58px}.ex-mic{position:absolute;right:8px;bottom:10px;width:46px;height:46px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:21px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.18)}.ex-mic.on{background:#c0392b;animation:exP 1.2s infinite}@keyframes exP{50%{box-shadow:0 0 0 10px rgba(192,57,43,.15)}}' +
+    '.ex-tip{margin:6px 2px;font-size:12.5px}.ex-act{position:sticky;bottom:0;background:var(--card);padding:10px 0 2px;gap:8px;flex-wrap:wrap;z-index:2}.ex-act .btn{flex:1 1 40%;text-align:center}' +
+    '.ex-kid{margin:2px 2px 8px;font-size:14px}.ex-miss{margin:0 2px 8px;color:var(--warn)}' +
+    '.ex-sec{margin:10px 0;padding:12px}.ex-sec h3{margin:0 0 8px;font-size:15px}.ex-fld{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}.ex-fld:first-of-type{border-top:0}' +
+    '.ex-fl{font-size:13px;color:var(--muted)}.ex-fld.miss .ex-fl{color:var(--warn);font-weight:600}.ex-fc{gap:6px}.ex-fc button{font-size:13px;padding:6px 10px}' +
+    '.ex-in{font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-in,10px);background:var(--card-2);color:var(--ink);width:100%;box-sizing:border-box}.ex-fld.miss .ex-in{border-color:var(--warn);background:var(--warn-bg)}' +
+    '.ex-ev{margin:0 0 6px;padding-left:18px}.ex-ev li{margin:3px 0}.ph.ph-done{opacity:.75}' +
+    '.ex-pda{border:1.5px solid #e2a3a3}.ex-pda.off{opacity:.55}.ex-ph{display:flex;align-items:center;gap:8px;justify-content:space-between}.ex-ph h3{margin:0}' +
+    '.ex-tag{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;background:var(--line);color:var(--ink);white-space:nowrap}.ex-tag.ok{background:#e3f4e8;color:#1e7a3c}.ex-tag.warn{background:var(--warn-bg);color:var(--warn)}.ex-tag.bad{background:var(--bad-bg,#fde8e8);color:var(--bad,#b3261e)}' +
+    '.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.ex-grid label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}' +
+    '.ex-gate{margin-top:10px}.ex-gate button[aria-pressed=true]{background:var(--bad-bg,#fde8e8);color:var(--bad,#b3261e);border-color:var(--bad,#b3261e)}' +
+    '.ex-eval{background:var(--card-2);border-radius:12px;padding:8px 10px;margin:10px 0}.ex-eval p{margin:3px 0;font-size:14px}' +
+    '.ex-src{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;text-decoration:none}a.ex-src{color:var(--accent)}' +
+    '.ex-wh{margin:14px 0 6px;font-size:15px}.ex-world{list-style:none;margin:0;padding:0}.ex-world li{padding:9px 0;border-top:1px solid var(--line)}.ex-world p{margin:4px 0 0;font-size:13.5px;line-height:1.45}.ex-wr{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.ex-flag{font-size:18px}' +
+    '.ex-dis{margin:8px 0;padding:8px 10px;border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:6px}.ex-dis p{margin:3px 0;font-size:13px}' +
+    '.ex-ci button{font-size:12.5px;padding:5px 9px}.ex-ci button[aria-pressed=true]{background:var(--bad-bg,#fde8e8);color:var(--bad,#b3261e);border-color:var(--bad,#b3261e)}' +
+    '.ex-dose{list-style:none;margin:0;padding:0}.ex-dose li{padding:8px 0;border-top:1px solid var(--line)}.ex-dose li.no p{text-decoration:line-through;opacity:.6}.ex-dose p{margin:3px 0 0;font-size:14px}.ex-dose b{font-family:var(--num)}' +
+    '.ex-tact button{font-size:13.5px}.ex-sup{font-size:13px;color:#1e7a3c;margin:8px 0 4px}.ex-ag{margin:8px 0;padding:8px 10px;border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:6px}.ex-ag p{margin:3px 0;font-size:13px}.ex-ag textarea{width:100%;box-sizing:border-box;margin-top:6px}' +
+    '.ex-q{margin:4px 0 8px;padding:8px 10px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:6px;font-size:13.5px;line-height:1.45}' +
+    '.ex-out{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}.ex-check{margin:10px 0;padding:10px 12px}.ex-c{margin:5px 0 0;font-size:13.5px;padding-left:20px;position:relative}.ex-c:before{position:absolute;left:0}.ex-c.ok:before{content:"✓";color:#1e7a3c}.ex-c.warn:before{content:"!";color:var(--warn);font-weight:700}.ex-c.bad:before{content:"⚠";color:var(--bad,#b3261e)}';
+  document.head.appendChild(st);
+
+  new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 90); }).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('hashchange', function () { setTimeout(tick, 160); });
+  setTimeout(tick, 700);
+  window.__neoExpress = { open: open, parse: parse, build: build, world: world, judge: judge, doses: doses, ctx: pdaCtx, state: function () { return E; }, events: eventPhrases };
 })();
 </script>
 <script id="aig-import">
