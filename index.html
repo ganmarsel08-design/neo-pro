@@ -3316,8 +3316,66 @@ window.__neoSaveErr = function (err, key) {
   var has = function (x) { return x != null && x !== ''; };
   function vitals(v, inv) { return 'ЧД – ' + (inv ? 'ИВЛ' : (has(v.rr) ? v.rr : B)) + '  ЧСС – ' + (has(v.hr) ? v.hr : B) + '  Т – ' + (has(v.t) ? String(v.t).replace('.', ',') : B) + '  АД – ' + (has(v.bp) ? v.bp : B) + ' мм рт. ст.  Sat – ' + (has(v.spo2) ? v.spo2 : B) + '%'; }
   var DYN = { stab: 'без отрицательной динамики', pos: 'с положительной динамикой', neg: 'с отрицательной динамикой' };
-  function hydro(f, fp) {
-    return 'Гидробаланс (24 ч): энтерально по плану ' + (fp ? fmt(fp.tot, 1) + ' мл' + (fp.mlkg != null ? ' (' + fmt(fp.mlkg, 0) + ' мл/кг)' : '') : B + ' мл') + ', фактически ' + B + ' мл; в/в по плану ' + (num(f.iv) ? f.iv + ' мл' : B + ' мл') + ', фактически ' + B + ' мл; диурез ' + B + ' мл/кг/ч; стул ' + B + ' раз(а). Масса на утро ' + B + ' г.';
+
+  /* ================= ФАКТ ВВЕДЕНИЯ ЖИДКОСТИ: только подтверждённые события ================= */
+  // k.fluid[] = { id, kind:'feed'|'iv'|'wt', date, hm, ml | g, st:'given'|'partial'|'skipped'|'cancelled', ts, src }
+  // Неизвестное не равно нулю и не равно плану: нет события — в тексте «___». Масса — только с датой измерения.
+  var FKIND = { feed: 'Кормление', iv: 'В/в инфузия', wt: 'Масса' }, FST = { given: 'введено', partial: 'введено частично / прервано', skipped: 'пропущено', cancelled: 'отменено' };
+  var nextDay = function (d) { var t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
+  function fRel(x) { var t = hm2m(x.hm); return t < SHIFT0 ? t + 1440 : t; }
+  function fluidEvents(k, date) { return ((k && k.fluid) || []).filter(function (x) { return x.kind !== 'wt' && shiftDate(x.date, x.hm) === date; }).sort(function (a, b) { return fRel(a) - fRel(b); }); }
+  function weightFor(k, date) {
+    var w = ((k && k.fluid) || []).filter(function (x) { return x.kind === 'wt' && shiftDate(x.date, x.hm) <= date; }).sort(function (a, b) { return (a.date + a.hm) < (b.date + b.hm) ? -1 : 1; });
+    return w.length ? w[w.length - 1] : null;
+  }
+  function fluidFact(k, date, fp) {
+    var ev = fluidEvents(k, date), out = {};
+    ['feed', 'iv'].forEach(function (kd) {
+      var a = ev.filter(function (x) { return x.kind === kd; });
+      var done = a.filter(function (x) { return x.st === 'given' || x.st === 'partial'; });
+      out[kd] = { n: a.length, done: done.length, partial: a.filter(function (x) { return x.st === 'partial'; }).length, off: a.filter(function (x) { return x.st === 'skipped' || x.st === 'cancelled'; }).length,
+        ml: Math.round(done.reduce(function (t, x) { return t + (+x.ml || 0); }, 0) * 10) / 10 };
+    });
+    return out;
+  }
+  function factTxt(a, planN, noun) {
+    if (!a.n) return B + ' мл'; // событий нет — неизвестно, а не 0 и не план
+    return ml(a.ml) + ' мл по ' + a.done + ' подтверждённым ' + noun + (planN ? ' из ' + planN + ' плановых' : '') +
+      (a.partial ? ' (частично/прервано: ' + a.partial + ')' : '') + (a.off ? ', пропущено/отменено ' + a.off : '') + (planN && a.n < planN ? '; по остальным данных нет' : '');
+  }
+  function fluidAdd(kid, o) {
+    var k = getKid(kid); if (!k) return { ok: false, why: 'нет ребёнка' };
+    var kind = o.kind, hm = o.hm, st = o.kind === 'wt' ? 'given' : o.st;
+    if (!FKIND[kind]) return { ok: false, why: 'тип' };
+    if (!/^\d{1,2}:\d{2}$/.test(hm || '')) return { ok: false, why: 'Укажите время' };
+    var date = hm2m(hm) < SHIFT0 ? nextDay(o.date) : o.date;
+    if (kind === 'wt') { if (!(+o.g > 300 && +o.g < 9000)) return { ok: false, why: 'Масса в граммах (300–9000)' }; }
+    else {
+      if (!FST[st]) return { ok: false, why: 'Укажите статус' };
+      if ((st === 'given' || st === 'partial') && !(+o.ml >= 0 && String(o.ml).trim() !== '')) return { ok: false, why: 'Укажите объём в мл' };
+    }
+    var rel = hm2m(hm); if (rel < SHIFT0) rel += 1440; if (rel > nowRel(o.date)) return { ok: false, why: 'Время в будущем — факт записать нельзя' };
+    var it = { id: o.id || ('f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)), kind: kind, date: date, hm: pad2(hm), ts: Date.now(), src: 'express' };
+    if (kind === 'wt') it.g = +o.g; else { it.st = st; if (st === 'given' || st === 'partial') it.ml = +o.ml; }
+    k.fluid = k.fluid || [];
+    if (k.fluid.some(function (x) { return x.id === it.id; })) return { ok: true, it: it, dup: true };
+    k.fluid.push(it);
+    if (!saveOK(k)) { k.fluid = k.fluid.filter(function (x) { return x.id !== it.id; }); if (!k.fluid.length) delete k.fluid; return { ok: false, why: 'Не сохранено — память заполнена' }; }
+    return { ok: true, it: it };
+  }
+  function fluidDel(kid, id) {
+    var k = getKid(kid), a = k && k.fluid; if (!a) return false;
+    var snap = a.slice(); k.fluid = a.filter(function (x) { return x.id !== id; }); if (!k.fluid.length) delete k.fluid;
+    if (saveOK(k)) return true; k.fluid = snap; return false;
+  }
+  function pad2(hm) { var m = /^(\d{1,2}):(\d{2})$/.exec(hm); return ('0' + m[1]).slice(-2) + ':' + m[2]; }
+  function hydro(f, fp, k, date) {
+    var fa = fluidFact(k, date, fp), w = weightFor(k, date), wt;
+    if (!w) wt = 'Масса на утро ' + B + ' г';
+    else if (shiftDate(w.date, w.hm) === date) wt = 'Масса на утро ' + w.g + ' г (измерена ' + ddmm(w.date) + ' ' + w.hm + ')';
+    else wt = 'Масса на утро ' + B + ' г (последняя известная ' + w.g + ' г от ' + ddmm(w.date) + ')';
+    return 'Гидробаланс (24 ч): энтерально по плану ' + (fp ? fmt(fp.tot, 1) + ' мл' + (fp.mlkg != null ? ' (' + fmt(fp.mlkg, 0) + ' мл/кг)' : '') : B + ' мл') + ', фактически ' + factTxt(fa.feed, fp ? fp.n : 0, 'кормлениям') +
+      '; в/в по плану ' + (num(f.iv) ? f.iv + ' мл' : B + ' мл') + ', фактически ' + factTxt(fa.iv, 0, 'записям') + '; диурез ' + B + ' мл/кг/ч; стул ' + B + ' раз(а). ' + wt + '.';
   }
   // mode: 'doc' — врач ввёл данные по интервалу; 'draft' — черновик, осмотра нет; 'same' — врач подтвердил «без изменений»
   function shortSlot(E, slot, last, fp, mode) {
@@ -3339,7 +3397,7 @@ window.__neoSaveErr = function (err, key) {
     if (v.note && v.note.trim()) p.push(cap(v.note.trim().replace(/([^.])$/, '$1.')));
     var t = vitals(v, f.modeK === 'inv') + '\n\n' + p.join(' ');
     if (mode === 'doc' && v.exam) t = withExam(t, v.exam);
-    if (last) t += '\n\n' + hydro(f, fp);
+    if (last) t += '\n\n' + hydro(f, fp, E.kid && E.kid !== '-' ? getKid(E.kid) : null, E.date);
     return t;
   }
   function buildDay(E) {
@@ -3540,6 +3598,13 @@ window.__neoSaveErr = function (err, key) {
       if (b.dataset.ctact) { var ce2 = cget(b.dataset.ctact); ce2.tact = ce2.tact === b.dataset.v ? '' : b.dataset.v; redrawCard(box, ce2); return; }
       if (b.dataset.coff) { var ce3 = cget(b.dataset.coff); ce3.on = !ce3.on; redrawCard(box, ce3); return; }
       if (b.dataset.cdel) { E.conds = E.conds.filter(function (x) { return x.id !== b.dataset.cdel; }); E.conds0 = (E.conds0 || []).filter(function (x) { return x.id !== b.dataset.cdel; }); var el = box.querySelector('#exC-' + b.dataset.cdel); if (el) el.remove(); return; }
+      if (b.id === 'flAdd' || b.dataset.fldel) {
+        var fe = box.querySelector('#flErr'), r0;
+        if (b.dataset.fldel) r0 = { ok: fluidDel(E.kid, b.dataset.fldel), why: 'Не сохранено — память заполнена' };
+        else { var kd0 = box.querySelector('#flKind').value, v0 = box.querySelector('#flMl').value.replace(',', '.'); r0 = fluidAdd(E.kid, { kind: kd0, date: E.date, hm: box.querySelector('#flHm').value, ml: v0, g: v0, st: box.querySelector('#flSt').value }); }
+        if (!r0.ok) { fe.textContent = r0.why; fe.hidden = false; return; }
+        box.querySelector('#exFluid').outerHTML = fluidSec(); return;
+      }
       if (b.dataset.dyn) { E.dyn = E.dyn === b.dataset.dyn ? '' : b.dataset.dyn; box.querySelectorAll('[data-dyn]').forEach(function (x) { if (x.dataset.dyn === E.dyn) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
       if (b.id === 'exAddBtn') { var pk = box.querySelector('#exPick'); pk.hidden = !pk.hidden; return; }
       if (b.dataset.cadd) { var ne = C().make(b.dataset.cadd, E.text); E.conds.push(ne); E.conds0 = (E.conds0 || []).concat([ne]); stepReview(); var nc = document.querySelector('#exC-' + ne.id); if (nc) nc.scrollIntoView({ block: 'start' }); return; }
@@ -3554,9 +3619,20 @@ window.__neoSaveErr = function (err, key) {
   }
   function markJust(hb) { if (!hb) return; hb.querySelectorAll('.ph').forEach(function (el) { if (E.justs[el.dataset.rule]) el.classList.add('ph-done'); }); }
 
+  function fluidSec() {
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null; if (!k) return '';
+    var ev = fluidEvents(k, E.date), w = weightFor(k, E.date);
+    return '<div id="exFluid">' + '<p class="meta ex-l">Факт введения за смену — только то, что подтверждено. Нет записи = «___» (не ноль и не план).</p>' +
+      (w ? '<p class="meta">Масса: ' + w.g + ' г, измерена ' + ddmm(w.date) + ' ' + w.hm + '</p>' : '') +
+      ev.map(function (x) { return '<p class="ex-fe">' + x.hm + ' · ' + FKIND[x.kind] + ' · ' + FST[x.st] + (x.ml != null ? ' · ' + ml(x.ml) + ' мл' : '') + ' <button type="button" class="ex-x" data-fldel="' + esc(x.id) + '" aria-label="Удалить">✕</button></p>'; }).join('') +
+      '<div class="ex-vg"><select class="ex-in" id="flKind"><option value="feed">Кормление</option><option value="iv">В/в инфузия</option><option value="wt">Масса (г)</option></select>' +
+      '<input class="ex-in" type="time" id="flHm"><input class="ex-in" id="flMl" inputmode="decimal" placeholder="мл / г">' +
+      '<select class="ex-in" id="flSt"><option value="given">введено</option><option value="partial">частично/прервано</option><option value="skipped">пропущено</option><option value="cancelled">отменено</option></select></div>' +
+      '<button type="button" class="btn ghost" id="flAdd">Добавить факт</button><p class="pill warn" id="flErr" hidden></p></div>';
+  }
   function daySec() {
     var F0 = N().F0 || [];
-    return '<section class="card ex-sec"><h3>Остальные интервалы дня</h3>' +
+    return '<section class="card ex-sec"><h3>Остальные интервалы дня</h3>' + fluidSec() +
       '<p class="meta ex-l">Динамика за сутки — пойдёт в краткие записи</p><div class="chips">' + [['stab', 'без отрицательной динамики'], ['pos', 'положительная'], ['neg', 'отрицательная']].map(function (x) { return chip('data-dyn', x[0], x[1], E.dyn === x[0]); }).join('') + '</div>' +
       '<p class="meta ex-l">Интервал попадёт в дневник только если указано время вашего осмотра; без него — черновик. «Как утром» отметьте только если осмотрели и изменений нет, иначе состояние останется «___».</p>' +
       F0.slice(1).map(function (sl) { var v = E.vs[sl] || {}; var inp = function (k, ph, w) { return '<input class="ex-in ex-vin" data-vs="' + sl + '|' + k + '" inputmode="' + (k === 'bp' || k === 'note' ? 'text' : 'decimal') + '" placeholder="' + ph + '" value="' + esc(v[k] || '') + '"' + (w ? ' style="flex:' + w + '"' : '') + '>'; };
@@ -3865,13 +3941,13 @@ window.__neoSaveErr = function (err, key) {
     '.ex-tact button{font-size:13.5px}.ex-sup{font-size:13px;color:#1e7a3c;margin:8px 0 4px}.ex-ag{margin:8px 0;padding:8px 10px;border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:6px}.ex-ag p{margin:3px 0;font-size:13px}.ex-ag textarea{width:100%;box-sizing:border-box;margin-top:6px}' +
     '.ex-q{margin:4px 0 8px;padding:8px 10px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:6px;font-size:13.5px;line-height:1.45}' +
     '.ex-dr{color:var(--warn)}.ex-drow{margin:8px 0;padding:10px}.ex-dtx{white-space:normal;line-height:1.45;font-size:14.5px}.ex-draftbtn{display:block;width:100%;margin:8px 0}' +
-    '.ex-out{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}.ex-slh{margin:12px 2px 4px;font-weight:700;font-size:14px;color:var(--accent)}.ex-mode{margin-top:8px}.ex-fcalc{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft)}.ex-fcalc p{margin:3px 0;font-size:14px}.ex-vrow{padding:8px 0;border-top:1px solid var(--line)}.ex-vrow b{font-size:13px}.ex-vg{display:flex;gap:6px;margin:5px 0}.ex-vg .ex-in{flex:1;min-width:0;padding:7px 6px;font-size:15px;text-align:center}.ex-vrow>.ex-in{font-size:14px;padding:7px 9px}.ex-check{margin:10px 0;padding:10px 12px}.ex-c{margin:5px 0 0;font-size:13.5px;padding-left:20px;position:relative}.ex-c:before{position:absolute;left:0}.ex-c.ok:before{content:"✓";color:#1e7a3c}.ex-c.warn:before{content:"!";color:var(--warn);font-weight:700}.ex-c.bad:before{content:"⚠";color:var(--bad,#b3261e)}';
+    '.ex-fe{margin:3px 0;font-size:14px}.ex-fe .ex-x{padding:0 6px}.ex-out{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}.ex-slh{margin:12px 2px 4px;font-weight:700;font-size:14px;color:var(--accent)}.ex-mode{margin-top:8px}.ex-fcalc{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft)}.ex-fcalc p{margin:3px 0;font-size:14px}.ex-vrow{padding:8px 0;border-top:1px solid var(--line)}.ex-vrow b{font-size:13px}.ex-vg{display:flex;gap:6px;margin:5px 0}.ex-vg .ex-in{flex:1;min-width:0;padding:7px 6px;font-size:15px;text-align:center}.ex-vrow>.ex-in{font-size:14px;padding:7px 9px}.ex-check{margin:10px 0;padding:10px 12px}.ex-c{margin:5px 0 0;font-size:13.5px;padding-left:20px;position:relative}.ex-c:before{position:absolute;left:0}.ex-c.ok:before{content:"✓";color:#1e7a3c}.ex-c.warn:before{content:"!";color:var(--warn);font-weight:700}.ex-c.bad:before{content:"⚠";color:var(--bad,#b3261e)}';
   document.head.appendChild(st);
 
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 90); }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', function () { setTimeout(tick, 160); });
   setTimeout(tick, 700);
-  window.__neoExpress = { drafts: draftList, openDrafts: openDrafts, confirmDraft: confirmDraft, shiftDate: shiftDate, open: open, parse: parse, build: build, cctx: cctx, ctext: ctext, state: function () { return E; }, events: eventPhrases };
+  window.__neoExpress = { fluidAdd: fluidAdd, fluidDel: fluidDel, fluidFact: fluidFact, hydro: hydro, drafts: draftList, openDrafts: openDrafts, confirmDraft: confirmDraft, shiftDate: shiftDate, open: open, parse: parse, build: build, cctx: cctx, ctext: ctext, state: function () { return E; }, events: eventPhrases };
 })();
 </script>
 <script id="conds">/* НеоДневник Pro — карточки заболеваний для экспресс-дневника.
