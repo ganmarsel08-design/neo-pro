@@ -2350,6 +2350,13 @@ body.vopen { overflow: hidden; }
     var fm = /(?:кормлени[а-я]*|энтеральн[а-я]*|питани[а-я]*|грудн[а-я]* молок[а-я]*|смес[а-я]*|сцеж[а-я]*)[^.;]{0,40}?(\d+(?:[.,]\d)?)\s*мл/.exec(low);
     if (fm) o.feed = fm[1].replace('.', ',');
     var ff = /(?:каждые|через)\s*(\d)\s*(?:ч|час)/.exec(low); if (ff) o.feedQ = ff[1];
+    var fi = /(?:нараст[а-я]*|наращива[а-я]*|увелич[а-я]*|прибавл[а-я]*|добавл[а-я]*)[^.;]{0,30}?(?:по|на)?\s*\+?\s*(\d+(?:[.,]\d)?)\s*мл/.exec(low) || /(?:^|[\s(,])(?:\+|плюс)\s*(\d+(?:[.,]\d)?)\s*мл/.exec(low);
+    if (fi) o.feedInc = fi[1].replace('.', ',');
+    var fx = /(?:кормлени|нараст|наращива|увелич)[^.;]{0,60}?до\s*(\d+(?:[.,]\d)?)\s*мл/.exec(low); if (fx) o.feedMax = fx[1].replace('.', ',');
+    if (/(?:через|по)\s+(?:ж\/?\s?зонд|желудочн[а-я]* зонд|зонд)/.test(low)) o.feedRt = 'зонд'; else if (/сос[её]т|из бутылочк|из соски|прикладыва|грудь/.test(low)) o.feedRt = 'сам';
+    if (/(?:^|[^а-я])сгм(?![а-я])|сцеж[а-я]* грудн/.test(low)) o.feedTp = 'СГМ'; else if (/донорск[а-я]* молок/.test(low)) o.feedTp = 'донорское молоко'; else if (/смес[а-я]*/.test(low)) o.feedTp = 'смесь'; else if (/грудн[а-я]* молок/.test(low)) o.feedTp = 'грудное молоко';
+    var iv = /(?:инфузи[а-я]*|в\/в|внутривенн[а-я]*|парентеральн[а-я]*)[^.;]{0,30}?(\d{2,4})\s*мл/.exec(low); if (iv) o.iv = iv[1];
+    var nv = /неврологическ[а-я]*\s+статус[а-я]*\s*[:\-–]?\s*([^.;]+)/.exec(low); if (nv) o.neuro = nv[1].trim();
     var fw = fm ? low.slice(fm.index, fm.index + fm[0].length + 70) : (/(?:кормлени|энтеральн|усваива|переносит)[^]{0,70}/.exec(low) || [''])[0];
     if (/не переносит|не усваива|застой|сбрасыва|по зонду сброс|рвот[а-я]*|срыгив[а-я]*|желудочн[а-я]* остат/.test(fw)) o.tol = 'no'; else if (/переносит|усваива|без остатк/.test(fw)) o.tol = 'yes';
     if (/(?:кормлени[а-я]*|энтеральн[а-я]*)\s+не\s+(?:проводит|получа)|голод|энтерально не|нпо|ничего через рот/.test(low)) o.feed = '0';
@@ -2380,11 +2387,76 @@ body.vopen { overflow: hidden; }
     if (e.tact) { var l = C().line(d, c, e.tact, e.why); if (l) t += (t ? ' ' : '') + l; }
     return t;
   }
+  /* ================= КОРМЛЕНИЕ: наращивание и мл/кг/сут ================= */
+  var ml = function (v) { return (Math.round(v * 10) / 10).toFixed(1).replace('.', ','); };
+  var hm2m = function (s) { var m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : 0; };
+  function feedPlan(E) {
+    var f = E.f, v0 = num(f.feed); if (v0 == null || v0 === 0) return null;
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null, w = num(f.w) || (k ? num(k.bw) : null);
+    var q = num(f.feedQ) || 3, n = Math.max(1, Math.round(24 / q)), inc = num(f.feedInc) || 0, mx = num(f.feedMax);
+    var F0 = N().F0 || [], s0 = hm2m((F0[0] || '08:30').split(/[–-]/)[0]), first = Math.ceil(s0 / 60) * 60, vols = [], times = [];
+    for (var i = 0; i < n; i++) { var v = v0 + i * inc; if (mx != null && v > mx) v = mx; vols.push(Math.round(v * 10) / 10); times.push(first + i * q * 60); }
+    var tot = vols.reduce(function (a, b) { return a + b; }, 0), iv = num(f.iv);
+    var r = { v0: v0, q: q, n: n, inc: inc, mx: mx, vols: vols, times: times, tot: Math.round(tot * 10) / 10, w: w, last: vols[vols.length - 1] };
+    if (w) { r.mlkg = tot / (w / 1000); if (iv) { r.ivkg = iv / (w / 1000); r.allkg = r.mlkg + r.ivkg; } }
+    r.iv = iv;
+    return r;
+  }
+  // объём на кормлениях внутри интервала («12:00–15:00»)
+  function slotVols(fp, slot) {
+    var p = slot.split(/[–-]/), a = hm2m(p[0]), b = hm2m(p[1]) || 1440, base = fp.times[0] - 60;
+    if (a < base) a += 1440; if (b <= a) b += 1440;
+    var v = []; fp.times.forEach(function (t, i) { if (t >= a && t < b) v.push(fp.vols[i]); });
+    return v;
+  }
+  function volTxt(v) { if (!v.length) return ''; var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v); return lo === hi ? ml(lo) : ml(lo) + '–' + ml(hi); }
+  function feedBox(E) {
+    var fp = feedPlan(E);
+    if (!fp) return '<p class="meta">Скажите объём кормления — посчитаю наращивание и мл/кг/сут.</p>';
+    return '<div class="ex-fcalc"><p><b>' + fp.n + ' кормлений</b> каждые ' + fmt(fp.q) + ' ч: ' + fp.vols.map(function (v) { return fmt(v, 1); }).join(' → ') + ' мл</p>' +
+      '<p>За сутки энтерально: <b>' + fmt(fp.tot, 1) + ' мл</b>' + (fp.mlkg != null ? ' = <b>' + fmt(fp.mlkg, 0) + ' мл/кг/сут</b>' : '') + '</p>' +
+      (fp.ivkg != null ? '<p>В/в ' + fp.iv + ' мл = ' + fmt(fp.ivkg, 0) + ' мл/кг/сут · всего жидкости <b>' + fmt(fp.allkg, 0) + ' мл/кг/сут</b></p>' : '') +
+      (fp.w ? '<p class="ex-src">Расчёт на массу ' + fp.w + ' г' + (num(E.f.w) ? '' : ' (при рождении — укажите текущую, если другая)') + '. Первое кормление — в начале утреннего интервала.</p>' : '<p class="ex-src">Укажите массу — посчитаю мл/кг/сут.</p>') + '</div>';
+  }
+  function fdraw() { var el = document.getElementById('exFeed'); if (el && E) el.innerHTML = feedBox(E); }
+  function feedPlanLine(E, fp) {
+    var f = E.f;
+    return 'Энтеральное кормление' + (f.feedTp ? ' ' + f.feedTp : '') + ' по ' + ml(fp.v0) + ' мл' + (f.feedRt === 'зонд' ? ' через ж/зонд' : '') + ' каждые ' + fmt(fp.q) + ' ч' +
+      (fp.inc ? ' с наращиванием по ' + ml(fp.inc) + ' мл на каждое кормление' + (fp.mx != null ? ' до ' + ml(fp.mx) + ' мл' : '') : '') +
+      '; расчётный объём за сутки ' + fmt(fp.tot, 1) + ' мл' + (fp.mlkg != null ? ' (' + fmt(fp.mlkg, 0) + ' мл/кг/сут)' : '') + '.' +
+      (fp.ivkg != null ? ' Инфузионная терапия ' + fp.iv + ' мл/сут (' + fmt(fp.ivkg, 0) + ' мл/кг/сут), общий объём жидкости ' + fmt(fp.allkg, 0) + ' мл/кг/сут.' : '');
+  }
+  var B = '___';
+  var has = function (x) { return x != null && x !== ''; };
+  function vitals(v, inv) { return 'ЧД – ' + (inv ? 'ИВЛ' : (has(v.rr) ? v.rr : B)) + '  ЧСС – ' + (has(v.hr) ? v.hr : B) + '  Т – ' + (has(v.t) ? String(v.t).replace('.', ',') : B) + '  АД – ' + (has(v.bp) ? v.bp : B) + ' мм рт. ст.  Sat – ' + (has(v.spo2) ? v.spo2 : B) + '%'; }
+  var DYN = { stab: 'без отрицательной динамики', pos: 'с положительной динамикой', neg: 'с отрицательной динамикой' };
+  function shortSlot(E, slot, last, fp) {
+    var f = E.f, v = (E.vs || {})[slot] || {}, p = [];
+    p.push('За время наблюдения состояние ребёнка ' + (f.state || B) + (E.dyn ? ', ' + DYN[E.dyn] : '') + '.');
+    if (f.modeK === 'none') p.push('Дышит самостоятельно' + (f.fio2 && f.fio2 > 21 ? ', FiO₂ ' + f.fio2 + '%' : '') + '.');
+    else if (f.mode) p.push('Продолжается респираторная поддержка: ' + f.mode + (f.fio2 ? ' по прежним параметрам' : '') + '.');
+    if (f.feed === '0') p.push('Энтерально не кормится.');
+    else if (fp) { var sv = slotVols(fp, slot); p.push('Получает энтеральное кормление' + (f.feedTp ? ' ' + f.feedTp : '') + (sv.length ? ' по ' + volTxt(sv) + ' мл' : ' в заданном объёме') + (f.feedRt === 'зонд' ? ' через ж/зонд' : '') + (f.tol === 'yes' ? ', усваивает' : f.tol === 'no' ? ', застой/срыгивания' : '') + '.'); }
+    if (E.dyn === 'stab' || E.dyn === 'pos') p.push('Неврологический статус: прежний.');
+    if (v.note && v.note.trim()) p.push(cap(v.note.trim().replace(/([^.])$/, '$1.')));
+    var t = vitals(v, f.modeK === 'inv') + '\n\n' + p.join(' ');
+    if (last) t += '\n\nГидробаланс (24 ч): энтерально ' + (fp ? fmt(fp.tot, 1) + ' мл' + (fp.mlkg != null ? ' (' + fmt(fp.mlkg, 0) + ' мл/кг)' : '') : B + ' мл') + '; в/в ' + (num(f.iv) ? f.iv + ' мл' : B + ' мл') + '; диурез ' + B + ' мл/кг/ч; стул ' + B + ' раз(а). Масса на утро ' + B + ' г.';
+    return t;
+  }
+  function buildDay(E) {
+    var F0 = N().F0 || [], fp = feedPlan(E), out = [];
+    var t1 = build(E).replace(/^.*\n/, '').replace(/^\n/, '');
+    if (fp) t1 += '\n\nПлан лечения: ' + feedPlanLine(E, fp);
+    out.push({ slot: F0[0], text: t1 });
+    for (var i = 1; i < F0.length; i++) out.push({ slot: F0[i], text: shortSlot(E, F0[i], i === F0.length - 1, fp) });
+    return out;
+  }
+
   function build(E) {
     var f = E.f, k = E.kid ? getKid(E.kid) : null, L = [];
     var inv = f.modeK === 'inv';
     L.push(dmy(E.date) + ' ' + E.slot);
-    L.push('ЧД – ' + (inv ? 'ИВЛ' : (f.rr != null ? f.rr + ' в мин' : NA)) + '   ЧСС – ' + (f.hr != null ? f.hr + ' в мин' : NA) + '   Т – ' + (f.t ? String(f.t).replace('.', ',') : NA) + '   SpO₂ – ' + (f.spo2 != null ? f.spo2 + '%' : NA) + '   АД – ' + (f.bp ? f.bp + ' мм рт. ст.' : NA));
+    L.push(vitals(f, inv));
     var hd = [];
     var d = f.dol != null ? f.dol : (k ? dol(k, E.date) : null);
     if (d) hd.push(d + '-е сутки жизни'); if (k && k.ga) hd.push('ГВ ' + k.ga + ' нед');
@@ -2403,10 +2475,11 @@ body.vopen { overflow: hidden; }
     (E.conds || []).forEach(function (e) { if (e.on) { var t = ctext(E, e); if (t) p.push(t); } });
     var fe;
     if (f.feed === '0') fe = 'Энтеральное питание не проводится';
-    else if (f.feed) fe = 'Энтеральное питание по ' + f.feed + ' мл' + (f.feedQ ? ' каждые ' + f.feedQ + ' ч' : '') + (f.tol === 'yes' ? ', усваивает' : f.tol === 'no' ? ', не усваивает (застой/срыгивания)' : '');
+    else if (f.feed) { var fp1 = feedPlan(E); fe = 'Получает энтеральное кормление' + (f.feedTp ? ' ' + f.feedTp : '') + ' по ' + (num(f.feed) != null ? ml(num(f.feed)) : f.feed) + ' мл' + (f.feedRt === 'зонд' ? ' через ж/зонд' : f.feedRt === 'сам' ? ', сосёт самостоятельно' : '') + (f.feedQ ? ' каждые ' + f.feedQ + ' ч' : '') + (fp1 && fp1.inc ? ' с наращиванием по ' + ml(fp1.inc) + ' мл на каждое кормление' : '') + (f.tol === 'yes' ? ', усваивает' : f.tol === 'no' ? ', не усваивает (застой/срыгивания)' : '') + (fp1 && fp1.mlkg != null ? ' (расчётно ' + fmt(fp1.mlkg, 0) + ' мл/кг/сут' + (fp1.allkg != null ? ', всего жидкости ' + fmt(fp1.allkg, 0) + ' мл/кг/сут' : '') + ')' : ''); }
     else fe = 'Энтеральное питание: ' + NA;
     p.push(fe + '.');
     p.push((f.abd ? 'Живот ' + f.abd : 'Живот: ' + NA) + '. ' + (f.diur === 'не было' ? 'Мочи не было' : f.diur ? 'Диурез ' + f.diur : 'Диурез: ' + NA) + '. ' + (f.stool === 'не было' ? 'Стула не было' : f.stool ? 'Стул ' + f.stool : 'Стул: ' + NA) + '.');
+    p.push('Неврологический статус: ' + (f.neuro ? f.neuro.replace(/[.\s]+$/, '') : NA) + '.');
     if (E.events.length) p.push(E.events.map(function (x) { return cap(x.replace(/[.\s]+$/, '')) + '.'; }).join(' '));
     var jt = Object.keys(E.justs).length && window.__neoHints ? window.__neoHints.justText({ just: Object.keys(E.justs).map(function (r) { return E.justs[r]; }) }) : '';
     if (jt) p.push(jt + '.');
@@ -2431,7 +2504,7 @@ body.vopen { overflow: hidden; }
   function open(o) {
     o = o || {};
     var tdy = today(), hm = nowHM();
-    E = { date: tdy, slot: slotFor(hm), kid: o.kid || '', auto: false, text: '', f: {}, conds: [], events: [], justs: {}, extra: '' };
+    E = { date: tdy, slot: slotFor(hm), kid: o.kid || '', auto: false, text: '', f: {}, conds: [], events: [], justs: {}, extra: '', day: lsGet('day') !== '0', vs: {}, dyn: '' };
     if (!E.kid) { var last = lsGet('kid'); if (last && getKid(last) && kidsList().length > 1) E.kid = ''; else if (kidsList().length === 1) E.kid = kidsList()[0].id; }
     stepInput();
   }
@@ -2442,7 +2515,8 @@ body.vopen { overflow: hidden; }
     var html = head('⚡ Экспресс-дневник', '1 / 3') +
       '<p class="meta ex-l">Когда</p><div class="chips">' + chip('data-date', tdy, 'Сегодня · ' + ddmm(tdy), E.date === tdy) + chip('data-date', yst, 'Вчера · ' + ddmm(yst), E.date === yst) +
       '<label class="ex-dpick' + (E.date !== tdy && E.date !== yst ? ' on' : '') + '">📅 <input type="date" id="exDate" value="' + esc(E.date) + '"></label></div>' +
-      '<div class="chips ex-slots">' + F0.map(function (s) { return chip('data-slot', s, s, s === E.slot); }).join('') + '</div>' +
+      '<div class="chips ex-mode">' + chip('data-day', '1', '📅 Весь день — все интервалы', E.day) + chip('data-day', '0', 'Один интервал', !E.day) + '</div>' +
+      (E.day ? '' : '<div class="chips ex-slots">' + F0.map(function (s) { return chip('data-slot', s, s, s === E.slot); }).join('') + '</div>') +
       '<p class="meta ex-l">Кто' + (E.auto ? ' <span class="ex-auto">найден по диктовке</span>' : '') + '</p><div class="chips ex-kids">' + kids.map(function (k) { var d = dol(k, E.date); return chip('data-kid', k.id, esc(k.label || 'Ребёнок') + (d ? ' · ' + d + ' сут' : ''), k.id === E.kid); }).join('') + chip('data-kid', '-', 'Без карточки', E.kid === '-') + '</div>' +
       '<p class="meta ex-l">Говорите, как удобно</p>' +
       '<div class="ex-ta"><textarea id="exText" rows="7" class="ctext" placeholder="Кювез 5, пятые сутки, масса 1080, CPAP, PEEP 6, FiO₂ 25, сатурация 92, ЧСС 156. Живот мягкий, кормление по 4 мл каждые 3 часа, переносит. ЭхоКГ: ОАП 2,1 мм, сброс слева направо, ЛП/Ао 1,6.">' + esc(E.text) + '</textarea>' +
@@ -2458,6 +2532,7 @@ body.vopen { overflow: hidden; }
       var b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-close')) { if (rec) try { rec.stop(); } catch (x) { } closeSheet(); return; }
       if (b.dataset.date) { E.date = b.dataset.date; stepInput(); return; }
+      if (b.dataset.day) { E.day = b.dataset.day === '1'; lsSet('day', E.day ? '1' : '0'); stepInput(); return; }
       if (b.dataset.slot) { E.slot = b.dataset.slot; box.querySelectorAll('[data-slot]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
       if (b.dataset.kid) { E.kid = b.dataset.kid; E.auto = false; box.querySelectorAll('[data-kid]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
       if (b.id === 'exMic') {
@@ -2499,9 +2574,9 @@ body.vopen { overflow: hidden; }
 
   /* ---------- шаг 2: как понял + вопросы ---------- */
   var FIELDS = [
-    ['Состояние и витальные', [['state', 'Состояние', 'ch', ['крайне тяжёлое', 'тяжёлое', 'средней тяжести', 'удовлетворительное']], ['hr', 'ЧСС', 'n'], ['rr', 'ЧД', 'n'], ['spo2', 'SpO₂, %', 'n'], ['t', 'Т, °C', 't'], ['bp', 'АД', 't']]],
+    ['Состояние и витальные', [['state', 'Состояние', 'ch', ['крайне тяжёлое', 'тяжёлое', 'средней тяжести', 'удовлетворительное']], ['hr', 'ЧСС', 'n'], ['rr', 'ЧД', 'n'], ['spo2', 'SpO₂, %', 'n'], ['t', 'Т, °C', 't'], ['bp', 'АД', 't'], ['neuro', 'Неврология', 't']]],
     ['Дыхание', [['mode', 'Поддержка', 'ch', ['самостоятельное дыхание', 'CPAP', 'неинвазивная ИВЛ (NIPPV)', 'ИВЛ', 'ВЧ ИВЛ', 'высокопоточные канюли']], ['fio2', 'FiO₂, %', 'n'], ['peep', 'PEEP', 't'], ['pip', 'PIP', 't'], ['map', 'MAP', 't']]],
-    ['Питание и ЖКТ', [['feed', 'Кормление, мл', 't'], ['feedQ', 'Каждые, ч', 'n'], ['tol', 'Усваивает', 'ch', [['yes', 'да'], ['no', 'нет, застой']]], ['abd', 'Живот', 'ch', ['мягкий', 'мягкий, не вздут', 'вздут', 'напряжён']]]],
+    ['Питание и ЖКТ', [['feed', 'Кормление, мл', 't'], ['feedQ', 'Каждые, ч', 'n'], ['feedInc', '+ мл каждое кормление', 'n'], ['feedMax', 'До, мл', 'n'], ['feedRt', 'Как', 'ch', [['зонд', 'через зонд'], ['сам', 'сосёт']]], ['iv', 'В/в, мл/сут', 'n'], ['tol', 'Усваивает', 'ch', [['yes', 'да'], ['no', 'нет, застой']]], ['abd', 'Живот', 'ch', ['мягкий', 'мягкий, не вздут', 'вздут', 'напряжён']]]],
     ['Выделение и масса', [['diur', 'Диурез', 'ch', ['адекватный', 'снижен', 'не было']], ['stool', 'Стул', 'ch', ['был', 'не было', 'меконий']], ['w', 'Масса, г', 'n'], ['dol', 'Сутки жизни', 'n']]]
   ];
   var MK = { 'самостоятельное дыхание': 'none', 'CPAP': 'niv', 'неинвазивная ИВЛ (NIPPV)': 'niv', 'ИВЛ': 'inv', 'ВЧ ИВЛ': 'inv', 'высокопоточные канюли': 'o2' };
@@ -2524,9 +2599,10 @@ body.vopen { overflow: hidden; }
     var seen = {}; hints = hints.filter(function (h) { if (seen[h.rule]) return false; seen[h.rule] = 1; return true; });
     E.hints = hints;
     var html = head('Как я понял', '2 / 3') +
-      '<div class="ex-kid">' + (k ? '<b>' + esc(k.label) + '</b> · ' + (k.ga ? k.ga + ' нед · ' : '') + (k.bw ? 'при рождении ' + esc(k.bw) + ' г · ' : '') : '<b>Без карточки</b> · ') + dmy(E.date) + ' · ' + esc(E.slot) + '</div>' +
+      '<div class="ex-kid">' + (k ? '<b>' + esc(k.label) + '</b> · ' + (k.ga ? k.ga + ' нед · ' : '') + (k.bw ? 'при рождении ' + esc(k.bw) + ' г · ' : '') : '<b>Без карточки</b> · ') + dmy(E.date) + ' · ' + (E.day ? 'весь день' : esc(E.slot)) + '</div>' +
       (missN ? '<p class="meta ex-miss">Не прозвучало: ' + missN + '. Отметьте кнопками — или оставьте, в дневнике будет «' + NA + '».</p>' : '') +
-      FIELDS.map(function (g) { return '<section class="card ex-sec"><h3>' + g[0] + '</h3>' + g[1].map(fieldHTML).join('') + '</section>'; }).join('') +
+      FIELDS.map(function (g) { return '<section class="card ex-sec"><h3>' + g[0] + '</h3>' + g[1].map(fieldHTML).join('') + (g[0] === 'Питание и ЖКТ' ? '<div id="exFeed">' + feedBox(E) + '</div>' : '') + '</section>'; }).join('') +
+      (E.day ? daySec() : '') +
       (E.conds || []).map(cardHTML).join('') + addPicker() +
       (E.events.length ? '<section class="card ex-sec"><h3>События и назначения</h3><ul class="ex-ev">' + E.events.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' + (hints.length && HN ? '<div id="exHints">' + HN.list(hints, { hideOk: false }) + '</div>' : '') + '</section>' : '') +
       '<section class="card ex-sec"><h3>Добавить своими словами</h3><textarea id="exExtra" rows="2" class="ctext" placeholder="Например: неврологический статус, план обследования">' + esc(E.extra) + '</textarea></section>' +
@@ -2535,8 +2611,9 @@ body.vopen { overflow: hidden; }
     if (HN && hints.length) { var hb = box.querySelector('#exHints'); if (hb) HN.bind(hb, function () { return E.hints; }, E, function () { hb.innerHTML = HN.list(E.hints, { hideOk: false }); markJust(hb); }); markJust(hb); }
     box.addEventListener('input', function (e) {
       var t = e.target;
-      if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ'].indexOf(key) >= 0 ? num(v) : v); t.closest('.ex-fld').classList.toggle('miss', v === ''); redrawAll(box); }
+      if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ', 'feedInc', 'feedMax', 'iv'].indexOf(key) >= 0 ? num(v) : v); fdraw(); t.closest('.ex-fld').classList.toggle('miss', v === ''); redrawAll(box); }
       if (t.id === 'exExtra') E.extra = t.value;
+      if (t.dataset.vs) { var vp = t.dataset.vs.split('|'); E.vs[vp[0]] = E.vs[vp[0]] || {}; E.vs[vp[0]][vp[1]] = t.value.trim(); }
       if (t.dataset.cq) { var pr = t.dataset.cq.split('|'), ce = cget(pr[0]); ce.st[pr[1]] = t.value.trim() === '' ? null : t.value.trim(); redrawCard(box, ce, t.dataset.cq); }
       if (t.dataset.cwhy) { cget(t.dataset.cwhy).why = t.value; }
     });
@@ -2561,6 +2638,7 @@ body.vopen { overflow: hidden; }
       if (b.dataset.ctact) { var ce2 = cget(b.dataset.ctact); ce2.tact = ce2.tact === b.dataset.v ? '' : b.dataset.v; redrawCard(box, ce2); return; }
       if (b.dataset.coff) { var ce3 = cget(b.dataset.coff); ce3.on = !ce3.on; redrawCard(box, ce3); return; }
       if (b.dataset.cdel) { E.conds = E.conds.filter(function (x) { return x.id !== b.dataset.cdel; }); E.conds0 = (E.conds0 || []).filter(function (x) { return x.id !== b.dataset.cdel; }); var el = box.querySelector('#exC-' + b.dataset.cdel); if (el) el.remove(); return; }
+      if (b.dataset.dyn) { E.dyn = E.dyn === b.dataset.dyn ? '' : b.dataset.dyn; box.querySelectorAll('[data-dyn]').forEach(function (x) { if (x.dataset.dyn === E.dyn) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
       if (b.id === 'exAddBtn') { var pk = box.querySelector('#exPick'); pk.hidden = !pk.hidden; return; }
       if (b.dataset.cadd) { var ne = C().make(b.dataset.cadd, E.text); E.conds.push(ne); E.conds0 = (E.conds0 || []).concat([ne]); stepReview(); var nc = document.querySelector('#exC-' + ne.id); if (nc) nc.scrollIntoView({ block: 'start' }); return; }
       if (b.id === 'exBack') { stepInput(); return; }
@@ -2572,6 +2650,15 @@ body.vopen { overflow: hidden; }
     });
   }
   function markJust(hb) { if (!hb) return; hb.querySelectorAll('.ph').forEach(function (el) { if (E.justs[el.dataset.rule]) el.classList.add('ph-done'); }); }
+
+  function daySec() {
+    var F0 = N().F0 || [];
+    return '<section class="card ex-sec"><h3>Остальные интервалы дня</h3>' +
+      '<p class="meta ex-l">Динамика за сутки — пойдёт в краткие записи</p><div class="chips">' + [['stab', 'без отрицательной динамики'], ['pos', 'положительная'], ['neg', 'отрицательная']].map(function (x) { return chip('data-dyn', x[0], x[1], E.dyn === x[0]); }).join('') + '</div>' +
+      '<p class="meta ex-l">Витальные по интервалам — что не впишете, останется «___»</p>' +
+      F0.slice(1).map(function (sl) { var v = E.vs[sl] || {}; var inp = function (k, ph, w) { return '<input class="ex-in ex-vin" data-vs="' + sl + '|' + k + '" inputmode="' + (k === 'bp' || k === 'note' ? 'text' : 'decimal') + '" placeholder="' + ph + '" value="' + esc(v[k] || '') + '"' + (w ? ' style="flex:' + w + '"' : '') + '>'; };
+        return '<div class="ex-vrow"><b>' + sl + '</b><div class="ex-vg">' + inp('hr', 'ЧСС') + inp('rr', 'ЧД') + inp('spo2', 'Sat') + inp('t', 'Т') + inp('bp', 'АД', 1.6) + '</div>' + inp('note', 'Что было в этом интервале (необязательно)') + '</div>'; }).join('') + '</section>';
+  }
 
   /* ---------- карточки заболеваний ---------- */
   function cget(id) { return E.conds.filter(function (x) { return x.id === id; })[0]; }
@@ -2633,12 +2720,15 @@ body.vopen { overflow: hidden; }
   /* ---------- шаг 3: готовый дневник ---------- */
   function stepResult() {
     var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
-    var txt = build(E), nNA = (txt.match(new RegExp(NA, 'g')) || []).length;
+    var parts = E.day ? buildDay(E) : null;
+    var txt = parts ? parts.map(function (x) { return x.text; }).join('\n\n') : build(E), nNA = (txt.match(new RegExp(NA, 'g')) || []).length;
     var F0 = N().F0 || [], first = E.slot === F0[0];
     var cur = '';
-    if (k && k.days && k.days[E.date]) { var e = k.days[E.date]; cur = first ? (e.note || '') : ((e.slotNote || {})[E.slot] || ''); }
+    if (k && k.days && k.days[E.date]) { var e = k.days[E.date]; cur = parts ? ((e.note || Object.keys(e.slotNote || {}).some(function (x) { return (e.slotNote[x] || '').trim(); })) ? 'есть' : '') : first ? (e.note || '') : ((e.slotNote || {})[E.slot] || ''); }
     var chk = [];
     if (nNA) chk.push(['warn', '«' + NA + '» — ' + nNA + ' раз. Эксперт увидит пробел; лучше дополнить.']);
+    var nB = (txt.match(/___/g) || []).length; if (nB) chk.push(['warn', 'Пустых полей «___» — ' + nB + ' (витальные, гидробаланс). Заполните в тексте или в Дамумеде.']);
+    if (parts && !E.dyn) chk.push(['warn', 'Динамика за сутки не отмечена — в кратких записях её нет.']);
     (E.conds || []).forEach(function (e) {
       if (!e.on) return; var d = C().by[e.id];
       if (!e.tact) { if (!d.kzOnly) chk.push(['warn', d.name + ': тактика не выбрана — в записи будет только описание.']); return; }
@@ -2649,10 +2739,10 @@ body.vopen { overflow: hidden; }
     if (un.length) chk.push(['bad', 'По протоколам РК без обоснования: ' + un.map(function (h) { return h.title; }).join('; ') + '. Вернитесь на шаг 2 и нажмите «Обосновать».']);
     if (!chk.length) chk.push(['ok', 'Замечаний нет.']);
     var html = head('Дневник готов', '3 / 3') +
-      '<p class="meta">' + (k ? esc(k.label) + ' · ' : '') + dmy(E.date) + ' · интервал ' + esc(E.slot) + '</p>' +
-      '<textarea id="exOut" rows="14" class="ctext ex-out">' + esc(txt) + '</textarea>' +
+      '<p class="meta">' + (k ? esc(k.label) + ' · ' : '') + dmy(E.date) + (parts ? ' · весь день, ' + parts.length + ' интервалов' : ' · интервал ' + esc(E.slot)) + '</p>' +
+      (parts ? parts.map(function (x, i) { return '<p class="ex-slh">' + esc(x.slot) + (i === 0 ? ' · полная запись' : '') + '</p><textarea data-out="' + esc(x.slot) + '" rows="' + (i === 0 ? 14 : 6) + '" class="ctext ex-out">' + esc(x.text) + '</textarea>'; }).join('') : '<textarea id="exOut" rows="14" class="ctext ex-out">' + esc(txt) + '</textarea>') +
       '<div class="card ex-check"><b>🛡 Проверка «Антидефекта»</b>' + chk.map(function (x) { return '<p class="ex-c ' + x[0] + '">' + esc(x[1]) + '</p>'; }).join('') + '</div>' +
-      (k && cur ? '<p class="meta ex-l">В этом интервале уже есть запись</p><div class="chips">' + chip('data-mode', 'add', 'Добавить ниже', E.mode !== 'rep') + chip('data-mode', 'rep', 'Заменить', E.mode === 'rep') + '</div>' : '') +
+      (k && cur ? '<p class="meta ex-l">' + (parts ? 'В этот день уже есть записи' : 'В этом интервале уже есть запись') + '</p><div class="chips">' + chip('data-mode', 'add', 'Добавить ниже', E.mode !== 'rep') + chip('data-mode', 'rep', 'Заменить', E.mode === 'rep') + '</div>' : '') +
       '<div class="actions ex-act">' + (k ? '<button type="button" class="btn pro-btn" id="exSave">Записать в дневник</button>' : '') + '<button type="button" class="btn ' + (k ? 'ghost' : 'pro-btn') + '" id="exCopy">Копировать</button><button type="button" class="btn ghost" id="exBack2">← Исправить</button></div>';
     var sh = sheet(html), box = sh.querySelector('.vbox');
     box.addEventListener('click', function (e) {
@@ -2660,6 +2750,27 @@ body.vopen { overflow: hidden; }
       if (b.hasAttribute('data-close')) { closeSheet(); return; }
       if (b.dataset.mode) { E.mode = b.dataset.mode; box.querySelectorAll('[data-mode]').forEach(function (x) { if (x === b) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); }); return; }
       if (b.id === 'exBack2') { stepReview(); return; }
+      if (parts) {
+        var outs = Array.prototype.map.call(box.querySelectorAll('[data-out]'), function (t) { return { slot: t.dataset.out, text: t.value }; });
+        if (b.id === 'exCopy') { copy(outs.map(function (x) { return dmy(E.date) + ' ' + x.slot + '\n' + x.text; }).join('\n\n')); b.textContent = '✓ Скопировано'; return; }
+        if (b.id === 'exSave') {
+          var kd = getKid(E.kid); kd.days = kd.days || {}; var ed = kd.days[E.date] || (kd.days[E.date] = {}), F0d = N().F0 || [];
+          var snap = JSON.stringify({ note: ed.note, slotNote: ed.slotNote });
+          outs.forEach(function (x) {
+            var body = x.text.trim(); if (!body) return;
+            var isFirst = x.slot === F0d[0], prev = isFirst ? (ed.note || '') : ((ed.slotNote || {})[x.slot] || '');
+            var val = prev && E.mode !== 'rep' ? prev.replace(/\s+$/, '') + '\n\n' + body : body;
+            if (isFirst) ed.note = val; else { ed.slotNote = ed.slotNote || {}; ed.slotNote[x.slot] = val; }
+          });
+          N().save(kd); lsSet('kid', kd.id); closeSheet(); try { if (N().rerender) N().rerender(); } catch (x) { }
+          toast('✓ ' + esc(kd.label) + ': дневник за ' + ddmm(E.date) + ', ' + outs.length + ' интервалов', 'Отменить', function () {
+            var k4 = getKid(kd.id), o4 = JSON.parse(snap), e4 = k4.days[E.date] || (k4.days[E.date] = {});
+            if (o4.note) e4.note = o4.note; else delete e4.note; if (o4.slotNote) e4.slotNote = o4.slotNote; else delete e4.slotNote;
+            N().save(k4); try { N().rerender(); } catch (x) { }
+          });
+        }
+        return;
+      }
       var out = box.querySelector('#exOut').value;
       if (b.id === 'exCopy') { copy(out); b.textContent = '✓ Скопировано'; return; }
       if (b.id === 'exSave') {
@@ -2758,7 +2869,7 @@ body.vopen { overflow: hidden; }
     '.ex-dose{list-style:none;margin:0;padding:0}.ex-dose li{padding:8px 0;border-top:1px solid var(--line)}.ex-dose li.no p{text-decoration:line-through;opacity:.6}.ex-dose p{margin:3px 0 0;font-size:14px}.ex-dose b{font-family:var(--num)}' +
     '.ex-tact button{font-size:13.5px}.ex-sup{font-size:13px;color:#1e7a3c;margin:8px 0 4px}.ex-ag{margin:8px 0;padding:8px 10px;border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:6px}.ex-ag p{margin:3px 0;font-size:13px}.ex-ag textarea{width:100%;box-sizing:border-box;margin-top:6px}' +
     '.ex-q{margin:4px 0 8px;padding:8px 10px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:6px;font-size:13.5px;line-height:1.45}' +
-    '.ex-out{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}.ex-check{margin:10px 0;padding:10px 12px}.ex-c{margin:5px 0 0;font-size:13.5px;padding-left:20px;position:relative}.ex-c:before{position:absolute;left:0}.ex-c.ok:before{content:"✓";color:#1e7a3c}.ex-c.warn:before{content:"!";color:var(--warn);font-weight:700}.ex-c.bad:before{content:"⚠";color:var(--bad,#b3261e)}';
+    '.ex-out{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}.ex-slh{margin:12px 2px 4px;font-weight:700;font-size:14px;color:var(--accent)}.ex-mode{margin-top:8px}.ex-fcalc{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft)}.ex-fcalc p{margin:3px 0;font-size:14px}.ex-vrow{padding:8px 0;border-top:1px solid var(--line)}.ex-vrow b{font-size:13px}.ex-vg{display:flex;gap:6px;margin:5px 0}.ex-vg .ex-in{flex:1;min-width:0;padding:7px 6px;font-size:15px;text-align:center}.ex-vrow>.ex-in{font-size:14px;padding:7px 9px}.ex-check{margin:10px 0;padding:10px 12px}.ex-c{margin:5px 0 0;font-size:13.5px;padding-left:20px;position:relative}.ex-c:before{position:absolute;left:0}.ex-c.ok:before{content:"✓";color:#1e7a3c}.ex-c.warn:before{content:"!";color:var(--warn);font-weight:700}.ex-c.bad:before{content:"⚠";color:var(--bad,#b3261e)}';
   document.head.appendChild(st);
 
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 90); }).observe(document.body, { childList: true, subtree: true });
