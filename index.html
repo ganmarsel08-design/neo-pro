@@ -3263,6 +3263,14 @@ window.__neoSaveErr = function (err, key) {
   function slotStart(slot) { var a = hm2m(String(slot).split(/[–-]/)[0]); return a < SHIFT0 ? a + 1440 : a; }
   function nowRel(date) { var t = today(), m = hm2m(nowHM()); if (t === date) return m; if (N().prev && N().prev(t) === date) return m + 1440; return t > date ? 1e6 : -1; }
   var slotDue = function (date, slot) { return slotStart(slot) <= nowRel(date); };
+  // время осмотра врача должно лежать внутри интервала и не быть в будущем: будущую часть интервала не утверждаем
+  function examOk(date, slot, hm) {
+    if (!/^\d{1,2}:\d{2}$/.test(hm || '')) return false;
+    var t = hm2m(hm); if (t < SHIFT0) t += 1440;
+    var a = slotStart(slot), b = a + 180;
+    return t >= a && t < b && t <= nowRel(date);
+  }
+  function withExam(text, hm) { var i = text.indexOf('\n\n'); return i < 0 ? text : text.slice(0, i + 2) + 'Осмотр в ' + hm + '. ' + text.slice(i + 2); }
   var vsHas = function (v) { return !!v && Object.keys(v).some(function (x) { return String(v[x] || '').trim(); }); };
 
   /* ================= КОРМЛЕНИЕ: наращивание и мл/кг/сут ================= */
@@ -3313,9 +3321,12 @@ window.__neoSaveErr = function (err, key) {
   }
   // mode: 'doc' — врач ввёл данные по интервалу; 'draft' — черновик, осмотра нет; 'same' — врач подтвердил «без изменений»
   function shortSlot(E, slot, last, fp, mode) {
-    var f = E.f, v = (E.vs || {})[slot] || {}, p = [], dr = mode === 'draft', same = mode === 'same';
-    var dyn = same ? 'stab' : E.dyn;
-    p.push(dr ? 'Состояние ребёнка: ' + B + '.' : 'За время наблюдения состояние ребёнка ' + (f.state || B) + (dyn ? ', ' + DYN[dyn] : '') + '.');
+    var f = E.f, v = (E.vs || {})[slot] || {}, p = [], same = mode === 'same';
+    // клинические утверждения («как утром», динамика, неврологический статус «прежний») — только при явном подтверждении осмотра по ЭТОМУ интервалу;
+    // одно измерение или заметка осмотр не подтверждают
+    var claims = same || (mode === 'doc' && v.same === '1'), dr = !claims;
+    var dyn = same ? 'stab' : (claims ? E.dyn : '');
+    p.push(dr ? 'Состояние ребёнка: ' + B + '.' : 'При осмотре состояние ребёнка ' + (f.state || B) + (dyn ? ', ' + DYN[dyn] : '') + '.');
     if (f.modeK === 'none') p.push(dr ? 'Дыхание: ' + B + '.' : 'Дышит самостоятельно' + (f.fio2 && f.fio2 > 21 ? ', FiO₂ ' + f.fio2 + '%' : '') + '.');
     else if (f.mode) p.push(dr ? 'Респираторная поддержка: ' + B + ' (утром — ' + f.mode + ').' : 'Продолжается респираторная поддержка: ' + f.mode + (f.fio2 ? ' по прежним параметрам' : '') + '.');
     if (f.feed === '0') p.push(dr ? 'Энтеральное питание: ' + B + '.' : 'Энтерально не кормится.');
@@ -3327,6 +3338,7 @@ window.__neoSaveErr = function (err, key) {
     else if (dyn === 'stab' || dyn === 'pos') p.push('Неврологический статус: прежний.');
     if (v.note && v.note.trim()) p.push(cap(v.note.trim().replace(/([^.])$/, '$1.')));
     var t = vitals(v, f.modeK === 'inv') + '\n\n' + p.join(' ');
+    if (mode === 'doc' && v.exam) t = withExam(t, v.exam);
     if (last) t += '\n\n' + hydro(f, fp);
     return t;
   }
@@ -3336,7 +3348,7 @@ window.__neoSaveErr = function (err, key) {
     if (fp) t1 += '\n\nПлан лечения: ' + feedPlanLine(E, fp);
     out.push({ slot: F0[0], text: t1 });
     for (var i = 1; i < F0.length; i++) {
-      var sl = F0[i], last = i === F0.length - 1, dr = !slotDue(E.date, sl) || !vsHas((E.vs || {})[sl]);
+      var sl = F0[i], last = i === F0.length - 1, vv = (E.vs || {})[sl] || {}, dr = !slotDue(E.date, sl) || !examOk(E.date, sl, vv.exam);
       out.push({ slot: sl, draft: dr, due: slotDue(E.date, sl), text: shortSlot(E, sl, last, fp, dr ? 'draft' : 'doc'), same: dr ? shortSlot(E, sl, last, fp, 'same') : null });
     }
     return out;
@@ -3503,7 +3515,7 @@ window.__neoSaveErr = function (err, key) {
       var t = e.target;
       if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ', 'feedInc', 'feedMax', 'iv'].indexOf(key) >= 0 ? num(v) : v); fdraw(); t.closest('.ex-fld').classList.toggle('miss', v === ''); redrawAll(box); }
       if (t.id === 'exExtra') E.extra = t.value;
-      if (t.dataset.vs) { var vp = t.dataset.vs.split('|'); E.vs[vp[0]] = E.vs[vp[0]] || {}; E.vs[vp[0]][vp[1]] = t.value.trim(); }
+      if (t.dataset.vs) { var vp = t.dataset.vs.split('|'); E.vs[vp[0]] = E.vs[vp[0]] || {}; E.vs[vp[0]][vp[1]] = t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value.trim(); }
       if (t.dataset.cq) { var pr = t.dataset.cq.split('|'), ce = cget(pr[0]); ce.st[pr[1]] = t.value.trim() === '' ? null : t.value.trim(); redrawCard(box, ce, t.dataset.cq); }
       if (t.dataset.cwhy) { cget(t.dataset.cwhy).why = t.value; }
     });
@@ -3546,9 +3558,10 @@ window.__neoSaveErr = function (err, key) {
     var F0 = N().F0 || [];
     return '<section class="card ex-sec"><h3>Остальные интервалы дня</h3>' +
       '<p class="meta ex-l">Динамика за сутки — пойдёт в краткие записи</p><div class="chips">' + [['stab', 'без отрицательной динамики'], ['pos', 'положительная'], ['neg', 'отрицательная']].map(function (x) { return chip('data-dyn', x[0], x[1], E.dyn === x[0]); }).join('') + '</div>' +
-      '<p class="meta ex-l">Витальные по интервалам — что не впишете, останется «___»</p>' +
+      '<p class="meta ex-l">Интервал попадёт в дневник только если указано время вашего осмотра; без него — черновик. «Как утром» отметьте только если осмотрели и изменений нет, иначе состояние останется «___».</p>' +
       F0.slice(1).map(function (sl) { var v = E.vs[sl] || {}; var inp = function (k, ph, w) { return '<input class="ex-in ex-vin" data-vs="' + sl + '|' + k + '" inputmode="' + (k === 'bp' || k === 'note' ? 'text' : 'decimal') + '" placeholder="' + ph + '" value="' + esc(v[k] || '') + '"' + (w ? ' style="flex:' + w + '"' : '') + '>'; };
-        return '<div class="ex-vrow"><b>' + sl + '</b><div class="ex-vg">' + inp('hr', 'ЧСС') + inp('rr', 'ЧД') + inp('spo2', 'Sat') + inp('t', 'Т') + inp('bp', 'АД', 1.6) + '</div>' + inp('note', 'Что было в этом интервале (необязательно)') + '</div>'; }).join('') + '</section>';
+        return '<div class="ex-vrow"><b>' + sl + '</b><div class="ex-vg">' + inp('hr', 'ЧСС') + inp('rr', 'ЧД') + inp('spo2', 'Sat') + inp('t', 'Т') + inp('bp', 'АД', 1.6) + '</div>' + inp('note', 'Что было в этом интервале (необязательно)') +
+          '<div class="ex-vg"><label class="meta">Осмотрел в <input type="time" class="ex-in ex-vin" data-vs="' + sl + '|exam" value="' + esc(v.exam || '') + '"></label><label class="meta"><input type="checkbox" data-vs="' + sl + '|same"' + (v.same === '1' ? ' checked' : '') + '> состояние, дыхание, питание как утром</label></div></div>'; }).join('') + '</section>';
   }
 
   /* ---------- карточки заболеваний ---------- */
@@ -3634,7 +3647,7 @@ window.__neoSaveErr = function (err, key) {
       (parts ? (parts.some(function (x) { return x.draft; }) ? '<p class="pill warn">Интервалы с пометкой «черновик» в дневник сейчас не попадут. Подтвердите каждый после осмотра — кнопка «📝 Черновики».</p>' : '') + parts.map(function (x, i) { return '<p class="ex-slh' + (x.draft ? ' ex-dr' : '') + '">' + esc(x.slot) + (i === 0 ? ' · полная запись' : x.draft ? ' · черновик' + (x.due ? '' : ', с ' + esc(x.slot.split('–')[0])) : '') + '</p><textarea data-out="' + esc(x.slot) + '" rows="' + (i === 0 ? 14 : 6) + '" class="ctext ex-out">' + esc(x.text) + '</textarea>'; }).join('') : '<textarea id="exOut" rows="14" class="ctext ex-out">' + esc(txt) + '</textarea>') +
       '<div class="card ex-check"><b>🛡 Проверка «Антидефекта»</b>' + chk.map(function (x) { return '<p class="ex-c ' + x[0] + '">' + esc(x[1]) + '</p>'; }).join('') + '</div>' +
       (k && cur ? '<p class="meta ex-l">' + (parts ? 'В этот день уже есть записи' : 'В этом интервале уже есть запись') + '</p><div class="chips">' + chip('data-mode', 'add', 'Добавить ниже', E.mode !== 'rep') + chip('data-mode', 'rep', 'Заменить', E.mode === 'rep') + '</div>' : '') +
-      '<div class="actions ex-act">' + (k ? '<button type="button" class="btn pro-btn" id="exSave">Записать в дневник</button>' : '') + '<button type="button" class="btn ' + (k ? 'ghost' : 'pro-btn') + '" id="exCopy">Копировать</button><button type="button" class="btn ghost" id="exBack2">← Исправить</button></div>';
+      '<div class="actions ex-act">' + (k ? '<button type="button" class="btn pro-btn" id="exSave">Записать в дневник</button>' : '') + '<button type="button" class="btn ' + (k ? 'ghost' : 'pro-btn') + '" id="exCopy">Копировать</button>' + (parts && parts.some(function (x) { return x.draft; }) ? '<button type="button" class="btn ghost" id="exCopyDr">Копировать черновики (с пометкой)</button>' : '') + '<button type="button" class="btn ghost" id="exBack2">← Исправить</button></div>';
     var sh = sheet(html), box = sh.querySelector('.vbox');
     box.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
@@ -3643,7 +3656,9 @@ window.__neoSaveErr = function (err, key) {
       if (b.id === 'exBack2') { stepReview(); return; }
       if (parts) {
         var outs = Array.prototype.map.call(box.querySelectorAll('[data-out]'), function (t) { return { slot: t.dataset.out, text: t.value }; });
-        if (b.id === 'exCopy') { copy(outs.map(function (x) { return dmy(E.date) + ' ' + x.slot + '\n' + x.text; }).join('\n\n')); b.textContent = '✓ Скопировано'; return; }
+        var isDr = function (x) { var q = parts.filter(function (z) { return z.slot === x.slot; })[0]; return !!(q && q.draft); };
+        if (b.id === 'exCopy') { var okOuts = outs.filter(function (x) { return !isDr(x); }); copy(okOuts.map(function (x) { return dmy(E.date) + ' ' + x.slot + '\n' + x.text; }).join('\n\n')); b.textContent = '✓ Скопировано: ' + okOuts.length + ' интерв. (без черновиков)'; return; }
+        if (b.id === 'exCopyDr') { var drOuts = outs.filter(isDr); copy(drOuts.map(function (x) { return '[ЧЕРНОВИК — осмотр не подтверждён, в МИС не вносить] ' + dmy(E.date) + ' ' + x.slot + '\n' + x.text; }).join('\n\n')); b.textContent = '✓ Скопированы черновики: ' + drOuts.length; return; }
         if (b.id === 'exSave') {
           var kd = getKid(E.kid); kd.days = kd.days || {}; var ed = kd.days[E.date] || (kd.days[E.date] = {}), F0d = N().F0 || [];
           var snap = JSON.stringify({ note: ed.note, slotNote: ed.slotNote, drafts: ed.drafts }), nd = 0, nw = 0;
@@ -3656,7 +3671,11 @@ window.__neoSaveErr = function (err, key) {
             var val = prev && E.mode !== 'rep' ? prev.replace(/\s+$/, '') + '\n\n' + body : body;
             if (isFirst) ed.note = val; else { ed.slotNote = ed.slotNote || {}; ed.slotNote[x.slot] = val; }
           });
-          if (!saveOK(kd)) { b.textContent = '⚠ Не сохранено — скопируйте текст'; return; } lsSet('kid', kd.id); closeSheet(); try { if (N().rerender) N().rerender(); } catch (x) { }
+          if (!saveOK(kd)) {
+            var o5 = JSON.parse(snap); if (o5.note != null) ed.note = o5.note; else delete ed.note; if (o5.slotNote) ed.slotNote = o5.slotNote; else delete ed.slotNote; if (o5.drafts) ed.drafts = o5.drafts; else delete ed.drafts;
+            if (!Object.keys(ed).length) delete kd.days[E.date];
+            b.textContent = '⚠ Не сохранено — память заполнена. Текст на экране сохранён; освободите память и нажмите снова'; return;
+          } lsSet('kid', kd.id); closeSheet(); try { if (N().rerender) N().rerender(); } catch (x) { }
           toast('✓ ' + esc(kd.label) + ': в дневник — ' + nw + ' интерв.' + (nd ? ', черновиков ' + nd + ' — подтвердите после осмотра' : ''), 'Отменить', function () {
             var k4 = getKid(kd.id), o4 = JSON.parse(snap), e4 = k4.days[E.date] || (k4.days[E.date] = {});
             if (o4.note) e4.note = o4.note; else delete e4.note; if (o4.slotNote) e4.slotNote = o4.slotNote; else delete e4.slotNote; if (o4.drafts) e4.drafts = o4.drafts; else delete e4.drafts;
@@ -3673,7 +3692,10 @@ window.__neoSaveErr = function (err, key) {
         var prev = first ? (ee.note || '') : ((ee.slotNote || {})[E.slot] || '');
         var val = prev && E.mode !== 'rep' ? prev.replace(/\s+$/, '') + '\n\n' + body : body;
         if (first) ee.note = val; else { ee.slotNote = ee.slotNote || {}; ee.slotNote[E.slot] = val; }
-        if (!saveOK(kk)) { b.textContent = '⚠ Не сохранено — скопируйте текст'; return; } lsSet('kid', kk.id);
+        if (!saveOK(kk)) {
+          if (first) { if (prev) ee.note = prev; else delete ee.note; } else { ee.slotNote = ee.slotNote || {}; if (prev) ee.slotNote[E.slot] = prev; else delete ee.slotNote[E.slot]; }
+          b.textContent = '⚠ Не сохранено — память заполнена. Текст на экране сохранён; освободите память и нажмите снова'; return;
+        } lsSet('kid', kk.id);
         closeSheet(); try { if (N().rerender) N().rerender(); } catch (x) { }
         toast('✓ ' + esc(kk.label) + ': дневник ' + ddmm(E.date) + ' ' + esc(E.slot), 'Отменить', function () {
           var k3 = getKid(kk.id), e3 = k3.days[E.date] || (k3.days[E.date] = {});
@@ -3707,17 +3729,22 @@ window.__neoSaveErr = function (err, key) {
     });
     return out;
   }
-  function confirmDraft(kid, date, slot, text) {
+  // exam — время осмотра врача (внутри интервала, не в будущем); при ошибке сохранения состояние дневника и черновика возвращается
+  function confirmDraft(kid, date, slot, text, exam) {
     var k = getKid(kid), e = k && k.days && k.days[date], dr = e && e.drafts && e.drafts[slot]; if (!dr) return false;
     if (!slotDue(date, slot)) return false; // будущий интервал подтвердить нельзя
+    if (!examOk(date, slot, exam)) return false; // без времени осмотра внутри интервала — нельзя
     var F0 = N().F0 || [], first = slot === F0[0], prev = first ? (e.note || '') : ((e.slotNote || {})[slot] || '');
-    var val = prev ? prev.replace(/\s+$/, '') + '\n\n' + text.trim() : text.trim();
+    var snap = { note: e.note, sn: e.slotNote ? JSON.parse(JSON.stringify(e.slotNote)) : undefined, dr: JSON.parse(JSON.stringify(e.drafts)) };
+    var body = withExam(text.trim(), exam), val = prev ? prev.replace(/\s+$/, '') + '\n\n' + body : body;
     if (first) e.note = val; else { e.slotNote = e.slotNote || {}; e.slotNote[slot] = val; }
     delete e.drafts[slot]; if (!Object.keys(e.drafts).length) delete e.drafts;
-    return saveOK(k);
+    if (saveOK(k)) return true;
+    if (snap.note != null) e.note = snap.note; else delete e.note; if (snap.sn) e.slotNote = snap.sn; else delete e.slotNote; e.drafts = snap.dr;
+    return false;
   }
   function openDrafts(kidId) {
-    var L = draftList(kidId), ed = null;
+    var L = draftList(kidId), ed = null, edText = null, exam0 = '';
     function render() {
       L = draftList(kidId);
       var html = head('Черновики интервалов', '') + (L.length ? '<p class="meta">Подтверждайте после осмотра. «Без изменений» — состояние, поддержка и кормление как утром; витальные и гидробаланс — «___», если не дописали.</p>' : '<p class="meta">Черновиков нет.</p>') +
@@ -3725,7 +3752,7 @@ window.__neoSaveErr = function (err, key) {
           var nB = (x.d.text.match(/___/g) || []).length;
           return '<div class="card ex-drow" data-i="' + i + '"><b>' + esc(x.k.label) + '</b> · ' + ddmm(x.date) + ' · ' + esc(x.slot) +
             (x.due ? '' : '<p class="meta">Интервал ещё не наступил — подтвердить можно с ' + esc(x.slot.split('–')[0]) + '.</p>') +
-            (ed === i ? '<textarea data-dtext rows="7" class="ctext">' + esc(x.d.text) + '</textarea><div class="actions"><button type="button" class="btn pro-btn" data-dsave="' + i + '"' + (x.due ? '' : ' disabled') + '>Записать в дневник</button><button type="button" class="btn ghost" data-dcancel>Отмена</button></div>'
+            (ed === i ? '<label class="meta">Время вашего осмотра (внутри интервала ' + esc(x.slot) + ', не позже текущего) <input type="time" data-dexam class="ex-in" value="' + esc(exam0 || '') + '"></label><textarea data-dtext rows="7" class="ctext">' + esc(edText != null ? edText : x.d.text) + '</textarea><div class="actions"><button type="button" class="btn pro-btn" data-dsave="' + i + '"' + (x.due ? '' : ' disabled') + '>Подтверждаю осмотр и записываю</button><button type="button" class="btn ghost" data-dcancel>Отмена</button></div>'
               : '<p class="ex-dtx">' + esc(x.d.text).replace(/\n/g, '<br>') + '</p><p class="meta">Пустых полей: ' + nB + '</p><div class="actions">' +
                 (x.d.same ? '<button type="button" class="btn pro-btn" data-dsame="' + i + '"' + (x.due ? '' : ' disabled') + '>Осмотрел — без изменений</button>' : '') +
                 '<button type="button" class="btn ghost" data-dedit="' + i + '"' + (x.due ? '' : ' disabled') + '>Изменить</button><button type="button" class="btn ghost" data-ddel="' + i + '">Удалить</button></div>') + '</div>';
@@ -3735,11 +3762,22 @@ window.__neoSaveErr = function (err, key) {
         var b = ev.target.closest('button'); if (!b) return; var x;
         if (b.hasAttribute('data-close')) { closeSheet(); try { N().rerender(); } catch (e) { } return; }
         var fail = function () { var er = box.querySelector('#exDErr'); er.textContent = '⚠ Не сохранено — память телефона заполнена. Скопируйте текст.'; er.hidden = false; };
-        if (b.dataset.dsame != null) { x = L[+b.dataset.dsame]; if (!confirmDraft(x.k.id, x.date, x.slot, x.d.same)) return fail(); ed = null; render(); toast('✓ ' + esc(x.k.label) + ', ' + esc(x.slot) + ' — в дневнике'); return; }
-        if (b.dataset.dedit != null) { ed = +b.dataset.dedit; render(); return; }
-        if (b.hasAttribute('data-dcancel')) { ed = null; render(); return; }
-        if (b.dataset.dsave != null) { x = L[+b.dataset.dsave]; var t = box.querySelector('[data-dtext]').value; if (!t.trim()) return; if (!confirmDraft(x.k.id, x.date, x.slot, t)) return fail(); ed = null; render(); return; }
-        if (b.dataset.ddel != null) { x = L[+b.dataset.ddel]; var e = x.k.days[x.date]; delete e.drafts[x.slot]; if (!Object.keys(e.drafts).length) delete e.drafts; if (!saveOK(x.k)) return fail(); render(); return; }
+        if (b.dataset.dsame != null) { ed = +b.dataset.dsame; edText = L[ed].d.same; exam0 = ''; render(); var er0 = box.querySelector('#exDErr'); return; } // «как утром» — отдельное подтверждение: форма со временем осмотра, текст можно править
+        if (b.dataset.dedit != null) { ed = +b.dataset.dedit; edText = null; exam0 = ''; render(); return; }
+        if (b.hasAttribute('data-dcancel')) { ed = null; edText = null; render(); return; }
+        if (b.dataset.dsave != null) {
+          x = L[+b.dataset.dsave]; var t = box.querySelector('[data-dtext]').value, ex = box.querySelector('[data-dexam]').value; if (!t.trim()) return;
+          edText = t; exam0 = ex;
+          var er = box.querySelector('#exDErr');
+          if (!examOk(x.date, x.slot, ex)) { er.textContent = 'Укажите время вашего осмотра: внутри интервала ' + x.slot + ' и не позже текущего. Будущую часть интервала записать нельзя.'; er.hidden = false; return; }
+          if (!confirmDraft(x.k.id, x.date, x.slot, t, ex)) return fail();
+          ed = null; edText = null; exam0 = ''; render(); toast('✓ ' + esc(x.k.label) + ', ' + esc(x.slot) + ' — в дневнике (осмотр ' + esc(ex) + ')'); return;
+        }
+        if (b.dataset.ddel != null) {
+          x = L[+b.dataset.ddel]; var e = x.k.days[x.date], saved = JSON.parse(JSON.stringify(e.drafts));
+          delete e.drafts[x.slot]; if (!Object.keys(e.drafts).length) delete e.drafts;
+          if (!saveOK(x.k)) { e.drafts = saved; return fail(); } render(); return;
+        }
       };
     }
     render();
