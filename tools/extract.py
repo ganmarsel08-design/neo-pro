@@ -22,7 +22,7 @@ manifest = []
 (root/'src').mkdir(exist_ok=True)
 hn = 0
 def fmt(path, parser):
-    subprocess.run(['npx', '--yes', 'prettier', '--parser', parser, '--print-width', '120', '--quote-props', 'preserve', '--write', str(root/path)],
+    subprocess.run([str(root/'node_modules/.bin/prettier'), '--parser', parser, '--print-width', '120', '--quote-props', 'preserve', '--write', str(root/path)],
                    check=True, capture_output=True, cwd='/tmp/tools')
 for kind, attrs, body in parts:
     if kind == 'html':

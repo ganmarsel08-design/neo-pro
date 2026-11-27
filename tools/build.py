@@ -2,14 +2,16 @@
 """Собирает index.html из src/ и data/ по src/manifest.json.
 Запуск:  python3 tools/build.py            -> index.html
          python3 tools/build.py --dev      -> без сжатия (удобно читать в браузере)
-Нужен Node.js (esbuild подтягивается через npx)."""
+Нужен Node.js. Версии esbuild/prettier зафиксированы в package.json: сначала `npm ci`."""
 import json, pathlib, subprocess, sys
 root = pathlib.Path(__file__).resolve().parent.parent
 dev = '--dev' in sys.argv
 
 def esbuild(code, loader, minify_whitespace_only=False):
     if dev: return code
-    args = ['npx', '--yes', 'esbuild', f'--loader={loader}', '--charset=utf8']
+    local = root / 'node_modules' / '.bin' / 'esbuild'
+    if not local.exists(): raise SystemExit('Нет node_modules/.bin/esbuild — выполните npm ci (версия зафиксирована в package.json)')
+    args = [str(local), f'--loader={loader}', '--charset=utf8']
     args += ['--minify-whitespace'] if loader == 'js' else ['--minify']
     r = subprocess.run(args, input=code, text=True, capture_output=True, encoding='utf-8')
     if r.returncode: raise SystemExit('esbuild: ' + r.stderr)
