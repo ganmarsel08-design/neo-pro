@@ -2304,17 +2304,6 @@ body.vopen { overflow: hidden; }
   function dol(k, date) { try { var v = N().G0(k, date); return v ? +v : null; } catch (e) { return null; } }
   function slotFor(hm) { return window.__neoLog ? window.__neoLog.slotFor(hm) : (N().F0 || [])[0]; }
 
-  /* ================= ИСТОЧНИКИ ================= */
-  var SRC = {
-    kz: { f: '🇰🇿', c: 'Казахстан', d: 'Клинические протоколы МЗ РК', u: '' },
-    ru: { f: '🇷🇺', c: 'Россия', d: 'КР «Гемодинамически значимый артериальный проток у недоношенного новорождённого», РОН и АСПМ, 2026', u: 'https://medpoint.pro/article/gemodinamicheski-znachimii-arterialnii-protok-u-nedonoshennogo-novorozhdennogo-2420', s: 'КР РФ «ГЗФАП у недоношенного новорождённого» (2026)' },
-    us: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Report «Patent Ductus Arteriosus in Preterm Infants», Pediatrics 2025', u: 'https://doi.org/10.1542/peds.2025-071425', s: 'клинический отчёт AAP «Patent Ductus Arteriosus in Preterm Infants» (Pediatrics, 2025)' },
-    ca: { f: '🇨🇦', c: 'Канада', d: 'CPS Position Statement «Management of the PDA in preterm infants», Paediatr Child Health 2022', u: 'https://cps.ca/documents/position/patent-ductus-arteriosus', s: 'позиция Канадского общества педиатров (CPS, 2022)' },
-    eu: { f: '🇪🇺', c: 'Европа', d: 'European Consensus Guidelines on the Management of RDS: 2025, Neonatology 2026', u: 'https://doi.org/10.1159/000551062', s: 'Европейский консенсус по РДС (2025)' },
-    rct: { d: 'Laughon MM и др. The PDA Randomized Clinical Trial, JAMA 2025', u: 'https://doi.org/10.1001/jama.2025.23330', s: 'РКИ NICHD PDA Trial (JAMA, 2025)' },
-    elg: { s: 'алгоритм раннего скрининга ЭКН (Early Screening of ELGANS)' }
-  };
-
   /* ================= РАЗБОР ДИКТОВКИ ================= */
   var R = {
     dol: [/(\d{1,3})\s*[-–]?\s*(?:е|ые|ие|ье|й)?\s*(?:сутки|суток|сут\.?|день жизни|дн[ея] жизни)/, /(?:день|сутки)\s+жизни\s*(\d{1,3})/],
@@ -2369,14 +2358,6 @@ body.vopen { overflow: hidden; }
     else { var dw = /диурез[а-я]*\s+(адекватн[а-я]*|достаточн[а-я]*|сохран[а-я]*|снижен[а-я]*|олигури[а-я]*|норм[а-я]*|не было|отсутств[а-я]*)/.exec(low); if (dw) o.diur = /снижен|олиг/.test(dw[1]) ? 'снижен' : /не было|отсутств/.test(dw[1]) ? 'не было' : 'адекватный'; }
     if (/стул[а-я]*\s+(?:не было|отсутств[а-я]*|нет)|стула не было|без стула/.test(low)) o.stool = 'не было';
     else { var sm = /стул[а-я]*\s+(был[а-я]*|меконий[а-я]*|переходн[а-я]*|желт[а-я]*|кашиц[а-я]*|жидк[а-я]*|с примес[а-я]*[а-я ]*|после клизм[а-я]*)/.exec(low); if (sm) o.stool = /^был/.test(sm[1]) ? 'был' : sm[1]; }
-    // ОАП
-    if (R.pda[0].test(low) && !/оап\s+(?:нет|не выявлен|закрыт)|проток[а-я]*\s+(?:закрыт|не функционир)/.test(low)) {
-      var p = o.pda = { d: num(grab(low, R.pdaD)), lpao: num(grab(low, R.lpao)) };
-      if (/справа\s*налево|право\s*[-–]?\s*лев[а-я]*|(?:^|[^а-я])п\s*[-–>→]\s*л(?![а-я])/.test(low)) p.dir = 'rl';
-      else if (/двунаправ[а-я]*|бидирекц[а-я]*|перекрестн[а-я]*/.test(low)) p.dir = 'bi';
-      else if (/слева\s*направо|лево\s*[-–]?\s*прав[а-я]*|(?:^|[^а-я])л\s*[-–>→]\s*п(?![а-я])/.test(low)) p.dir = 'lr';
-      if (/реверс[а-я]*|ретроградн[а-я]*/.test(low)) p.diast = 'rev'; else if (/диастол[а-я]*[^.;]{0,30}(?:снижен|отсутств|нулев)/.test(low)) p.diast = 'low';
-    }
     // остальное, что сказано, — отдельными фразами, чтобы ничего не потерять
     o.kid = kid || null;
     return o;
@@ -2387,139 +2368,17 @@ body.vopen { overflow: hidden; }
     return String(text || '').replace(/([.!?;])\s+/g, '$1\u0001').split(/\u0001|\n+/).map(function (x) { return x.trim().replace(/[.;]+$/, ''); }).filter(function (x) { return x && EVW.test(norm(x)) && !/(оап|проток)/.test(norm(x)); });
   }
 
-  /* ================= ОАП: ОЦЕНКА И «КАК В МИРЕ» ================= */
-  var CI = [
-    ['sepsis', 'Нелеченый сепсис'], ['bleed', 'Кровотечение / коагулопатия'], ['ivh', 'ВЖК II–III с нарастанием'],
-    ['uo', 'Диурез < 0,6 мл/кг/ч за 8 ч'], ['cr', 'Креатинин ≥ 132 мкмоль/л'], ['plt', 'Тромбоциты < 60×10⁹/л'],
-    ['nec', 'Подозрение на НЭК / хирургию живота'], ['bili', 'Гипербилирубинемия, нужна ЗПК'], ['co', 'Сейчас аминогликозиды или системные стероиды']
-  ];
-  var CLIN = [['hypo', 'Гипотензия'], ['olig', 'Олигурия'], ['ino1', '1 инотроп/вазопрессор'], ['ino2', '2 и более'], ['feed', 'Непереносимость кормления'], ['hem', 'Лёгочное кровотечение']];
-
-  function pdaCtx(E) {
-    var k = E.kid ? getKid(E.kid) : null, p = E.pda;
-    var ga = k ? num(k.ga) : null, d = E.f.dol != null ? E.f.dol : (k ? dol(k, E.date) : null);
-    var w = num(E.f.w) || (k ? num(k.bw) : null);
-    var fio2 = num(E.f.fio2), mk = E.f.modeK;
-    var sev = null, why = [];
-    if (mk || fio2 != null || Object.keys(p.clin).length) {
-      sev = 1;
-      if (fio2 != null && fio2 >= 30) { sev = 2; why.push('FiO₂ ' + fio2 + '%'); }
-      if (mk === 'niv' && num(E.f.map) > 8) { sev = 2; why.push('неинвазивная ИВЛ, MAP > 8'); }
-      if (p.clin.olig) { sev = Math.max(sev, 2); why.push('олигурия'); }
-      if (p.clin.ino1) { sev = Math.max(sev, 2); why.push('1 инотроп'); }
-      if (fio2 != null && fio2 > 50) { sev = 3; why.push('FiO₂ > 50%'); }
-      if (mk === 'inv') { sev = 3; why.push('инвазивная ИВЛ'); }
-      if (p.clin.hem) { sev = 3; why.push('лёгочное кровотечение'); }
-      if (p.clin.ino2) { sev = 3; why.push('2 инотропа'); }
-    }
-    var dsev = p.d == null ? null : p.d < 1.5 ? 1 : p.d <= 2.5 ? 2 : 3;
-    var over = p.lpao == null ? null : p.lpao >= 1.5;
-    var hypo = p.diast ? (p.diast !== 'norm') : null;
-    var hs = null, miss = [];
-    if (p.dir && p.dir !== 'lr') hs = false;
-    else if (p.d != null && p.d <= 1.5) hs = false;
-    else {
-      if (p.d == null) miss.push('диаметр'); if (!p.dir) miss.push('направление сброса');
-      if (over == null) miss.push('ЛП/Ао'); if (hypo == null) miss.push('диастолический кровоток в аорте');
-      if (!miss.length) hs = !!(over && hypo);
-    }
-    var ci = Object.keys(p.ci).filter(function (x) { return p.ci[x]; });
-    return { k: k, ga: ga, dol: d, w: w, sev: sev, sevWhy: why, dsev: dsev, hs: hs, miss: miss, over: over, hypo: hypo, ci: ci, gate: p.gate || (p.dir && p.dir !== 'lr'), renal: ci.some(function (x) { return x === 'plt' || x === 'cr' || x === 'uo'; }) };
+  /* ================= КАРТОЧКИ ЗАБОЛЕВАНИЙ (conds.js) ================= */
+  var C = function () { return window.__neoConds; };
+  function base(E) {
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
+    return { k: k, ga: k ? num(k.ga) : null, dol: E.f.dol != null ? num(E.f.dol) : (k ? dol(k, E.date) : null), w: num(E.f.w) || (k ? num(k.bw) : null), f: E.f, date: E.date };
   }
-  var SEV = ['', 'лёгкая', 'умеренная', 'тяжёлая'];
-
-  function world(c) {
-    var out = [], early = c.dol != null && c.dol < 14;
-    // Казахстан
-    out.push({ s: SRC.kz, v: 'Протокола нет', t: 'Отдельного клинического протокола МЗ РК по ОАП у недоношенных нет ни в базе «Антидефекта», ни в открытом поиске. Тактику решает врач или консилиум, обоснование со ссылкой на источник добавится в запись.' });
-    if (c.gate) {
-      out.push({ s: SRC.ru, v: 'Не закрывать', tone: 'bad', t: 'Абсолютное противопоказание к медикаментозному закрытию: проток-зависимый кровоток при ВПС, персистирующая лёгочная гипертензия.' });
-      out.push({ s: { f: '🌐', c: 'ELGANS', d: 'Early Screening of ELGANS — алгоритм из вашего материала по гемодинамике', u: '' }, v: 'Лечить причину', tone: 'bad', t: 'ЛГ — лёгочные вазодилататоры; дисфункция миокарда — инотропы; критический ВПС — простагландин E1, проток держат открытым.' });
-      return out;
-    }
-    // Россия
-    var ru;
-    if (c.hs === false && !(c.dsev >= 2)) ru = { v: 'Наблюдение', t: 'Критериям ГЗФАП не соответствует (нужны: диаметр > 1,5 мм, сброс слева направо, ≥ 1 признак перегрузки малого круга и ≥ 1 признак системной гипоперфузии). Медикаментозная профилактика не рекомендуется.' };
-    else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol < 3) ru = { v: 'Пока ждать', t: 'Медикаментозная профилактика не рекомендуется. При ≤ 26 нед ранняя целевая терапия возможна на 3–6-е сутки при тяжёлом или умеренном (с клиникой) ГЗФАП, по решению консилиума (B).' };
-    else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol <= 6) ru = { v: c.sev >= 2 || c.dsev === 3 ? 'Ранняя терапия по консилиуму' : 'Наблюдение', tone: c.sev >= 2 || c.dsev === 3 ? 'warn' : '', t: 'Срок < 26 нед, 3–6-е сутки: ранняя целевая терапия при тяжёлой или умеренной (с клиникой) степени — по решению консилиума (B). Препарат первой линии — ибупрофен (B).' };
-    else if (c.dol != null && c.dol <= 7) ru = { v: 'Выжидательная', t: 'После 26 нед в первые 7 суток медикаментозную терапию не назначают; при ≥ 28 нед — выжидательная тактика с ЭхоКГ в динамике.' };
-    else ru = { v: c.hs ? 'Симптоматическая терапия' : 'По ЭхоКГ', tone: c.hs ? 'warn' : '', t: 'После 7 суток при ГЗФАП: ибупрофен 10–5–5 мг/кг (A) или парацетамол 15 мг/кг каждые 6 ч, 3–7 сут (B). Курс прекращают, когда проток ≤ 1,5 мм (A). Если через 24 ч после курса ГЗФАП сохраняется — второй курс, препарат можно сменить.' };
-    ru.t += ' Без отёка лёгких фуросемид не рекомендуется (A).'; ru.s = SRC.ru; out.push(ru);
-    // США
-    out.push(early
-      ? { s: SRC.us, v: 'Выжидательная по умолчанию', t: 'Профилактика и рутинное закрытие до 2 недель не рекомендуются. При гемодинамически значимом ОАП ибупрофен или парацетамол — допустимый вариант. В РКИ NICHD (22–28 нед, JAMA 2025) смертность до 36 нед ПМВ: 4,1% при выжидательной тактике против 9,6% при лечении.' }
-      : { s: SRC.us, v: 'Можно закрывать', tone: c.hs ? 'warn' : '', t: 'Старше 2 недель медикаментозное закрытие гемодинамически значимого ОАП допустимо, ибупрофен предпочтительнее индометацина, не более двух курсов. Если не помогло — транскатетерное закрытие (≥ 700 г) или перевязка.' });
-    // Канада
-    var unstable = c.sev === 3, small = c.ga != null && c.ga < 26;
-    out.push({ s: SRC.ca, v: early ? (unstable && small ? 'Можно раньше' : 'Консервативно 1–2 нед') : 'Ибупрофен', tone: early && unstable && small ? 'warn' : '', t: (early ? (unstable && small ? 'Нестабильный ребёнок < 26 нед: с консервативной тактикой осторожно, можно рассмотреть более раннюю терапию. ' : 'Стабильным детям — консервативная тактика первые 1–2 недели (условная). ') : '') + 'Препарат выбора — ибупрофен (сильная); после 3–5 сут можно высокие дозы (осторожно < 26 нед). Лечение не начинают по одной клинике без ЭхоКГ. Жидкость не ограничивать < 120 мл/кг/сут; можно повысить ПДКВ; фуросемид допустим (условная).' });
-    // Европа
-    out.push({ s: SRC.eu, v: c.renal ? 'Парацетамол' : 'Любой из трёх', tone: c.renal ? 'warn' : '', t: 'Если выбрано медикаментозное закрытие: индометацин, ибупрофен и парацетамол сопоставимы (A2); парацетамол предпочтительнее при тромбоцитопении или нарушении функции почек (B2).' });
-    return out;
-  }
-  // расхождения между источниками — показываем честно
-  function disagree(c) {
-    var x = [];
-    x.push('Фуросемид: Россия — не применять без отёка лёгких; Канада — можно рассмотреть.');
-    if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) x.push('Ранняя терапия при < 26 нед: Россия допускает по консилиуму, США не рекомендуют рутинно до 2 недель.');
-    return x;
-  }
-  function doses(w) {
-    if (!w) return null; var kg = w / 1000;
-    return [
-      { id: 'ibu', n: 'Ибупрофен, стандартно', t: '10 мг/кг = <b>' + fmt(10 * kg, 1) + ' мг</b>, затем 5 мг/кг = <b>' + fmt(5 * kg, 1) + ' мг</b> через 24 и 48 ч', s: 'КР РФ 2026 (A), CPS 2022' },
-      { id: 'ibuh', n: 'Ибупрофен, высокие дозы', t: '15–20 мг/кг = <b>' + fmt(15 * kg, 1) + '–' + fmt(20 * kg, 1) + ' мг</b>, затем 7,5–10 мг/кг = <b>' + fmt(7.5 * kg, 1) + '–' + fmt(10 * kg, 1) + ' мг</b> через 24 и 48 ч', s: 'CPS 2022 (после 3–5 сут; осторожно < 26 нед)' },
-      { id: 'para', n: 'Парацетамол', t: '15 мг/кг = <b>' + fmt(15 * kg, 1) + ' мг</b> каждые 6 ч (60 мг/кг/сут = ' + fmt(60 * kg, 1) + ' мг), 3–7 сут', s: 'КР РФ 2026 (B)' }
-    ];
-  }
-  var TACT = [
-    ['wait', 'Выжидательная'], ['ibu', 'Ибупрофен'], ['para', 'Парацетамол'], ['cause', 'Лечить причину (ЛГ, миокард)'], ['surg', 'Кардиохирург']
-  ];
-  // что говорят источники о выбранной тактике: support — кто поддерживает, against — кто против в этой ситуации
-  function judge(t, c) {
-    var sup = [], ag = [];
-    var early = c.dol != null && c.dol < 14, ru7 = c.dol != null && c.dol <= 7 && !(c.ga != null && c.ga < 26 && c.dol >= 3);
-    if (t === 'wait') {
-      if (c.gate) ag.push('при ЛГ или проток-зависимом ВПС нужно лечить причину');
-      if (early) sup.push(SRC.us.s, SRC.ca.s); if (ru7 || c.hs === false) sup.push(SRC.ru.s); sup.push(SRC.rct.s);
-      if (!early && c.hs) ag.push('после 2 недель при ГЗФАП AAP допускает закрытие, КР РФ рекомендуют симптоматическую терапию');
-    } else if (t === 'ibu' || t === 'para') {
-      if (c.gate) ag.push('абсолютное противопоказание: ЛГ / проток-зависимый ВПС (КР РФ 2026)');
-      if (t === 'ibu' && c.ci.length) ag.push('есть противопоказания к ибупрофену по КР РФ 2026: ' + c.ci.map(function (x) { return CI.filter(function (y) { return y[0] === x; })[0][1].toLowerCase(); }).join(', '));
-      if (c.hs === false) ag.push('критериям ГЗФАП не соответствует');
-      else if (c.hs == null) ag.push('значимость не подтверждена: не хватает ' + c.miss.join(', '));
-      if (ru7 && c.hs !== false) ag.push('КР РФ: после 26 нед в первые 7 суток не назначают');
-      if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) ag.push('КР РФ: ранняя терапия при < 26 нед — по решению консилиума');
-      if (early) ag.push('AAP 2025: рутинное закрытие до 2 недель не рекомендовано');
-      sup.push(SRC.ru.s.replace('(2026)', t === 'ibu' ? '(2026, уровень A)' : '(2026, уровень B)'));
-      if (t === 'ibu') sup.push(SRC.ca.s); else sup.push(SRC.eu.s + (c.renal ? ' (B2)' : ' (A2)'));
-      if (!early) sup.push(SRC.us.s);
-    } else if (t === 'cause') { sup.push(SRC.elg.s, SRC.ru.s); }
-    else if (t === 'surg') { sup.push(SRC.ru.s, SRC.ca.s, SRC.us.s); if (early && !c.gate) ag.push('процедурное закрытие обычно после двух неэффективных курсов или при противопоказаниях'); }
-    // жёсткие — противоречат КР РФ или безопасности; мягкие — только расхождение с AAP/CPS
-    var hard = ag.filter(function (x) { return !/^AAP|^процедурное/.test(x); });
-    return { sup: sup, ag: ag, hard: hard };
-  }
-
-  /* ================= СБОРКА ТЕКСТА ================= */
-  function pdaText(E, c) {
-    var p = E.pda, parts = [];
-    var dir = { lr: 'слева направо', rl: 'справа налево', bi: 'двунаправленный' }[p.dir];
-    var echo = 'По данным ЭхоКГ: ОАП' + (p.d != null ? ' ' + fmt(p.d, 1) + ' мм' : '') + (dir ? ', сброс ' + dir : '') + (p.lpao != null ? ', ЛП/Ао ' + fmt(p.lpao, 2) : '') + (p.diast ? ', диастолический кровоток в нисходящей аорте ' + { norm: 'сохранён', low: 'снижен', rev: 'реверсивный' }[p.diast] : '') + '.';
-    parts.push(echo);
-    if (c.hs === true) parts.push('Проток гемодинамически значимый' + (c.sev ? ', клинически ' + SEV[c.sev] + ' степень' : '') + '.');
-    else if (c.hs === false && !c.gate) parts.push('Критериям гемодинамической значимости не соответствует.');
-    var w = c.w, kg = w ? w / 1000 : null, t = p.tact;
-    if (t === 'wait') parts.push('Выбрана выжидательная тактика: оптимизация респираторной терапии, контроль водного баланса, ЭхоКГ в динамике.');
-    if (t === 'ibu') parts.push('Начат курс ибупрофена: 10 мг/кг' + (kg ? ' (' + fmt(10 * kg, 1) + ' мг)' : '') + ', далее 5 мг/кг' + (kg ? ' (' + fmt(5 * kg, 1) + ' мг)' : '') + ' через 24 и 48 ч. Контроль диуреза, креатинина, тромбоцитов, ЭхоКГ после курса.');
-    if (t === 'para') parts.push('Начат курс парацетамола 15 мг/кг' + (kg ? ' (' + fmt(15 * kg, 1) + ' мг)' : '') + ' каждые 6 ч, 3–7 сут. Контроль печёночных проб, ЭхоКГ в динамике.');
-    if (t === 'cause') parts.push('Медикаментозное закрытие протока не показано, лечение направлено на причину' + (c.gate ? ' (лёгочная гипертензия / проток-зависимый кровоток)' : '') + '.');
-    if (t === 'surg') parts.push('Запрошена консультация кардиохирурга для решения вопроса о закрытии протока.');
-    if (t) {
-      var j = judge(t, c), line = 'Обоснование: отдельный протокол МЗ РК по ОАП у недоношенных отсутствует; тактика соответствует: ' + j.sup.join('; ') + '.';
-      if (j.ag.length && (p.why || '').trim()) line += ' Отличие от рекомендаций (' + j.ag.join('; ') + ') обосновано: ' + p.why.replace(/[.\s]+$/, '') + '.';
-      parts.push(line);
-    }
-    return parts.join(' ');
+  function cctx(E, e) { var d = C().by[e.id]; return d.ctx(e.st, base(E)); }
+  function ctext(E, e) {
+    var d = C().by[e.id], c = cctx(E, e), t = d.text(c, e.tact) || '';
+    if (e.tact) { var l = C().line(d, c, e.tact, e.why); if (l) t += (t ? ' ' : '') + l; }
+    return t;
   }
   function build(E) {
     var f = E.f, k = E.kid ? getKid(E.kid) : null, L = [];
@@ -2541,7 +2400,7 @@ body.vopen { overflow: hidden; }
       resp = 'Находится на ' + (f.modeK === 'inv' ? 'аппаратной ' : '') + 'респираторной поддержке: ' + f.mode + (pr.length ? ' с параметрами ' + pr.join(', ') : '');
     }
     p.push(resp + '.');
-    if (E.pda && E.pdaOn) p.push(pdaText(E, pdaCtx(E)));
+    (E.conds || []).forEach(function (e) { if (e.on) { var t = ctext(E, e); if (t) p.push(t); } });
     var fe;
     if (f.feed === '0') fe = 'Энтеральное питание не проводится';
     else if (f.feed) fe = 'Энтеральное питание по ' + f.feed + ' мл' + (f.feedQ ? ' каждые ' + f.feedQ + ' ч' : '') + (f.tol === 'yes' ? ', усваивает' : f.tol === 'no' ? ', не усваивает (застой/срыгивания)' : '');
@@ -2572,7 +2431,7 @@ body.vopen { overflow: hidden; }
   function open(o) {
     o = o || {};
     var tdy = today(), hm = nowHM();
-    E = { date: tdy, slot: slotFor(hm), kid: o.kid || '', auto: false, text: '', f: {}, pda: null, pdaOn: true, events: [], justs: {}, extra: '' };
+    E = { date: tdy, slot: slotFor(hm), kid: o.kid || '', auto: false, text: '', f: {}, conds: [], events: [], justs: {}, extra: '' };
     if (!E.kid) { var last = lsGet('kid'); if (last && getKid(last) && kidsList().length > 1) E.kid = ''; else if (kidsList().length === 1) E.kid = kidsList()[0].id; }
     stepInput();
   }
@@ -2631,7 +2490,10 @@ body.vopen { overflow: hidden; }
   function runParse() {
     var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
     var f = parse(E.text, k);
-    E.f = f; E.pda = f.pda ? { d: f.pda.d, dir: f.pda.dir || '', lpao: f.pda.lpao, diast: f.pda.diast || '', clin: {}, ci: {}, gate: false, tact: '', why: '' } : null;
+    E.f = f;
+    var keep = {}; (E.conds || []).forEach(function (e) { keep[e.id] = e; });
+    E.conds = C() ? C().detect(E.text).map(function (id) { return keep[id] || C().make(id, E.text); }) : [];
+    (E.conds0 || []).forEach(function (e) { if (!E.conds.some(function (x) { return x.id === e.id; })) E.conds.push(e); });
     E.events = eventPhrases(E.text); E.justs = {};
   }
 
@@ -2665,7 +2527,7 @@ body.vopen { overflow: hidden; }
       '<div class="ex-kid">' + (k ? '<b>' + esc(k.label) + '</b> · ' + (k.ga ? k.ga + ' нед · ' : '') + (k.bw ? 'при рождении ' + esc(k.bw) + ' г · ' : '') : '<b>Без карточки</b> · ') + dmy(E.date) + ' · ' + esc(E.slot) + '</div>' +
       (missN ? '<p class="meta ex-miss">Не прозвучало: ' + missN + '. Отметьте кнопками — или оставьте, в дневнике будет «' + NA + '».</p>' : '') +
       FIELDS.map(function (g) { return '<section class="card ex-sec"><h3>' + g[0] + '</h3>' + g[1].map(fieldHTML).join('') + '</section>'; }).join('') +
-      (E.pda ? pdaCard() : '') +
+      (E.conds || []).map(cardHTML).join('') + addPicker() +
       (E.events.length ? '<section class="card ex-sec"><h3>События и назначения</h3><ul class="ex-ev">' + E.events.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' + (hints.length && HN ? '<div id="exHints">' + HN.list(hints, { hideOk: false }) + '</div>' : '') + '</section>' : '') +
       '<section class="card ex-sec"><h3>Добавить своими словами</h3><textarea id="exExtra" rows="2" class="ctext" placeholder="Например: неврологический статус, план обследования">' + esc(E.extra) + '</textarea></section>' +
       '<div class="actions ex-act"><button type="button" class="btn pro-btn" id="exBuild">Собрать дневник →</button><button type="button" class="btn ghost" id="exBack">← Диктовка</button></div>';
@@ -2673,10 +2535,10 @@ body.vopen { overflow: hidden; }
     if (HN && hints.length) { var hb = box.querySelector('#exHints'); if (hb) HN.bind(hb, function () { return E.hints; }, E, function () { hb.innerHTML = HN.list(E.hints, { hideOk: false }); markJust(hb); }); markJust(hb); }
     box.addEventListener('input', function (e) {
       var t = e.target;
-      if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ'].indexOf(key) >= 0 ? num(v) : v); t.closest('.ex-fld').classList.toggle('miss', v === ''); if (E.pda && (key === 'fio2' || key === 'map' || key === 'w' || key === 'dol')) redrawPda(box); }
+      if (t.dataset.in) { var key = t.dataset.in, v = t.value.trim(); E.f[key] = v === '' ? null : (['hr', 'rr', 'spo2', 'fio2', 'w', 'dol', 'feedQ'].indexOf(key) >= 0 ? num(v) : v); t.closest('.ex-fld').classList.toggle('miss', v === ''); redrawAll(box); }
       if (t.id === 'exExtra') E.extra = t.value;
-      if (t.dataset.p) { E.pda[t.dataset.p] = num(t.value); redrawPda(box, t.dataset.p); }
-      if (t.id === 'exWhy') { E.pda.why = t.value; }
+      if (t.dataset.cq) { var pr = t.dataset.cq.split('|'), ce = cget(pr[0]); ce.st[pr[1]] = t.value.trim() === '' ? null : t.value.trim(); redrawCard(box, ce, t.dataset.cq); }
+      if (t.dataset.cwhy) { cget(t.dataset.cwhy).why = t.value; }
     });
     box.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
@@ -2687,69 +2549,84 @@ body.vopen { overflow: hidden; }
         if (key === 'mode') { stepReview(); return; }
         b.parentNode.querySelectorAll('button').forEach(function (x) { if (x === b && E.f[key] != null) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed'); });
         b.closest('.ex-fld').classList.toggle('miss', E.f[key] == null);
-        if (E.pda) redrawPda(box); return;
+        redrawAll(box); return;
       }
-      if (b.dataset.pset) { var k2 = b.dataset.pset, v2 = b.dataset.v; E.pda[k2] = E.pda[k2] === v2 ? '' : v2; redrawPda(box); return; }
-      if (b.dataset.pclin) { E.pda.clin[b.dataset.pclin] = !E.pda.clin[b.dataset.pclin]; redrawPda(box); return; }
-      if (b.dataset.pci) { E.pda.ci[b.dataset.pci] = !E.pda.ci[b.dataset.pci]; redrawPda(box); return; }
-      if (b.dataset.pgate != null) { E.pda.gate = !E.pda.gate; redrawPda(box); return; }
-      if (b.dataset.tact) { E.pda.tact = E.pda.tact === b.dataset.tact ? '' : b.dataset.tact; redrawPda(box); return; }
-      if (b.id === 'exPdaOff') { E.pdaOn = !E.pdaOn; b.textContent = E.pdaOn ? 'Не включать в дневник' : 'Включить в дневник'; box.querySelector('.ex-pda').classList.toggle('off', !E.pdaOn); return; }
+      if (b.dataset.cq) {
+        var pr = b.dataset.cq.split('|'), ce = cget(pr[0]), def = C().by[ce.id], qd = qdef(def, pr[1]);
+        if (qd.t === 'one') ce.st[pr[1]] = ce.st[pr[1]] === b.dataset.v ? '' : b.dataset.v;
+        else if (qd.t === 'flag') ce.st[pr[1]] = !ce.st[pr[1]];
+        else { ce.st[pr[1]] = ce.st[pr[1]] || {}; ce.st[pr[1]][b.dataset.v] = !ce.st[pr[1]][b.dataset.v]; }
+        redrawCard(box, ce); return;
+      }
+      if (b.dataset.ctact) { var ce2 = cget(b.dataset.ctact); ce2.tact = ce2.tact === b.dataset.v ? '' : b.dataset.v; redrawCard(box, ce2); return; }
+      if (b.dataset.coff) { var ce3 = cget(b.dataset.coff); ce3.on = !ce3.on; redrawCard(box, ce3); return; }
+      if (b.dataset.cdel) { E.conds = E.conds.filter(function (x) { return x.id !== b.dataset.cdel; }); E.conds0 = (E.conds0 || []).filter(function (x) { return x.id !== b.dataset.cdel; }); var el = box.querySelector('#exC-' + b.dataset.cdel); if (el) el.remove(); return; }
+      if (b.id === 'exAddBtn') { var pk = box.querySelector('#exPick'); pk.hidden = !pk.hidden; return; }
+      if (b.dataset.cadd) { var ne = C().make(b.dataset.cadd, E.text); E.conds.push(ne); E.conds0 = (E.conds0 || []).concat([ne]); stepReview(); var nc = document.querySelector('#exC-' + ne.id); if (nc) nc.scrollIntoView({ block: 'start' }); return; }
       if (b.id === 'exBack') { stepInput(); return; }
       if (b.id === 'exBuild') {
-        if (E.pda && E.pdaOn && E.pda.tact) { var j = judge(E.pda.tact, pdaCtx(E)); if (j.hard.length && !(E.pda.why || '').trim()) { var w = box.querySelector('#exWhy'); if (w) { w.focus(); w.classList.add('dt-bad'); w.scrollIntoView({ block: 'center' }); } return; } }
+        var bad = (E.conds || []).filter(function (e) { if (!e.on || !e.tact) return false; var j = C().by[e.id].judge(e.tact, cctx(E, e)); return j.hard.length && !(e.why || '').trim(); })[0];
+        if (bad) { var w = box.querySelector('[data-cwhy="' + bad.id + '"]'); if (w) { w.focus(); w.classList.add('dt-bad'); w.scrollIntoView({ block: 'center' }); } return; }
         stepResult();
       }
     });
   }
   function markJust(hb) { if (!hb) return; hb.querySelectorAll('.ph').forEach(function (el) { if (E.justs[el.dataset.rule]) el.classList.add('ph-done'); }); }
 
-  /* ---------- карточка ОАП ---------- */
-  function pdaCard() { return '<section class="card ex-sec ex-pda' + (E.pdaOn ? '' : ' off') + '" id="exPda">' + pdaInner() + '</section>'; }
-  function redrawPda(box, focusKey) {
-    var el = box.querySelector('#exPda'); if (!el) return;
-    var pos = focusKey ? (box.querySelector('[data-p="' + focusKey + '"]') || {}).selectionStart : null;
-    el.innerHTML = pdaInner();
-    if (focusKey) { var inp = el.querySelector('[data-p="' + focusKey + '"]'); if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch (x) { } } }
+  /* ---------- карточки заболеваний ---------- */
+  function cget(id) { return E.conds.filter(function (x) { return x.id === id; })[0]; }
+  function qdef(def, k) { if (def.ci && def.ci.k === k) return { k: k, t: 'multi' }; return def.q.filter(function (q) { return q.k === k; })[0]; }
+  function cardHTML(e) { return '<section class="card ex-sec ex-cond' + (e.on ? '' : ' off') + '" id="exC-' + e.id + '">' + cardInner(e) + '</section>'; }
+  function redrawCard(box, e, focus) {
+    var el = box.querySelector('#exC-' + e.id); if (!el) return;
+    var pos = null; if (focus) { var f0 = el.querySelector('[data-cq="' + focus + '"]'); if (f0) pos = f0.selectionStart; }
+    el.className = 'card ex-sec ex-cond' + (e.on ? '' : ' off'); el.innerHTML = cardInner(e);
+    if (focus) { var f1 = el.querySelector('[data-cq="' + focus + '"]'); if (f1) { f1.focus(); try { f1.setSelectionRange(pos, pos); } catch (x) { } } }
   }
-  function pdaInner() {
-    var p = E.pda, c = pdaCtx(E), w = world(c), ds = doses(c.w), dis = disagree(c);
-    var status = c.gate ? '<span class="ex-tag bad">Не закрывать</span>' : c.hs === true ? '<span class="ex-tag warn">ГЗФАП' + (c.sev ? ' · ' + SEV[c.sev] : '') + '</span>' : c.hs === false ? '<span class="ex-tag ok">Не значимый</span>' : '<span class="ex-tag">Значимость не ясна</span>';
-    var h = '<div class="ex-ph"><h3>❤️ ОАП — решение</h3>' + status + '</div>' +
-      '<p class="meta">' + [c.ga ? c.ga + ' нед' : 'срок не указан в карточке', c.dol ? c.dol + '-е сутки' : 'сутки не указаны', c.w ? 'масса ' + c.w + ' г' : 'масса не указана'].join(' · ') + '</p>' +
-      '<div class="ex-grid"><label>Диаметр, мм<input class="ex-in" data-p="d" inputmode="decimal" value="' + (p.d == null ? '' : fmt(p.d, 2)) + '"></label><label>ЛП/Ао<input class="ex-in" data-p="lpao" inputmode="decimal" value="' + (p.lpao == null ? '' : fmt(p.lpao, 2)) + '"></label></div>' +
-      '<p class="meta ex-l">Сброс</p><div class="chips">' + [['lr', 'слева направо'], ['bi', 'двунаправленный'], ['rl', 'справа налево']].map(function (x) { return chip('data-pset="dir" data-v', x[0], x[1], p.dir === x[0]); }).join('') + '</div>' +
-      '<p class="meta ex-l">Диастолический кровоток в нисходящей аорте</p><div class="chips">' + [['norm', 'сохранён'], ['low', 'снижен / нулевой'], ['rev', 'реверсивный']].map(function (x) { return chip('data-pset="diast" data-v', x[0], x[1], p.diast === x[0]); }).join('') + '</div>' +
-      '<p class="meta ex-l">Клиника</p><div class="chips">' + CLIN.map(function (x) { return chip('data-pclin', x[0], x[1], p.clin[x[0]]); }).join('') + '</div>' +
-      '<div class="chips ex-gate">' + chip('data-pgate', '1', '⚠ ЛГ или подозрение на проток-зависимый ВПС', p.gate) + '</div>';
-    // оценка
-    var ev = [];
-    if (c.dsev) ev.push('По диаметру: ' + SEV[c.dsev] + ' (< 1,5 / 1,5–2,5 / > 2,5 мм).');
-    if (c.sev) ev.push('Клинически: ' + SEV[c.sev] + (c.sevWhy.length ? ' — ' + c.sevWhy.join(', ') : '') + '.');
-    if (c.hs == null && !c.gate && c.miss.length) ev.push('Для вывода о значимости не хватает: ' + c.miss.join(', ') + '.');
-    if (c.hs === true) ev.push('ГЗФАП по КР РФ: диаметр > 1,5 мм, сброс слева направо, перегрузка малого круга (ЛП/Ао ≥ 1,5) и системная гипоперфузия.');
-    h += '<div class="ex-eval">' + ev.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<p class="ex-src">Градации — КР РФ 2026; критерии значимости не едины, решение по совокупности ЭхоКГ и клиники.</p></div>';
-    // мир
+  function redrawAll(box) { (E.conds || []).forEach(function (e) { redrawCard(box, e); }); }
+  function addPicker() {
+    if (!C()) return '';
+    var have = {}; (E.conds || []).forEach(function (e) { have[e.id] = 1; });
+    var full = C().list.filter(function (d) { return !d.kzOnly && !have[d.id]; }), kz = C().list.filter(function (d) { return d.kzOnly && !have[d.id]; });
+    return '<div class="ex-addc"><button type="button" class="btn ghost" id="exAddBtn">＋ Карточка заболевания</button><div id="exPick" hidden>' +
+      '<p class="meta ex-l">С рекомендациями «как в мире»</p><div class="chips">' + full.map(function (d) { return chip('data-cadd', d.id, d.icon + ' ' + esc(d.name)); }).join('') + '</div>' +
+      '<p class="meta ex-l">Протоколы РК</p><div class="chips">' + kz.map(function (d) { return chip('data-cadd', d.id, '📘 ' + esc(d.name)); }).join('') + '</div></div></div>';
+  }
+  function qHTML(e, q, c) {
+    var key = e.id + '|' + q.k, v = e.st[q.k];
+    if (q.t === 'num' || q.t === 'txt') return '<label class="ex-cl' + (q.half ? ' half' : '') + '">' + q.l + '<input class="ex-in" data-cq="' + key + '" inputmode="' + (q.t === 'num' ? 'decimal' : 'text') + '" value="' + esc(v == null ? '' : String(v).replace('.', ',')) + '"></label>';
+    var h = '<div class="ex-cq"><p class="meta ex-l">' + (q.t === 'flag' ? '' : q.l) + '</p><div class="chips' + (q.bad ? ' ex-gate' : '') + '">';
+    if (q.t === 'flag') h += chip('data-cq="' + key + '" data-v', '1', q.l, !!v);
+    else h += q.o.map(function (o) { return chip('data-cq="' + key + '" data-v', o[0], esc(o[1]), q.t === 'one' ? v === o[0] : !!(v && v[o[0]])); }).join('');
+    return h + '</div></div>';
+  }
+  function cardInner(e) {
+    var d = C().by[e.id], b = base(E), c = d.ctx(e.st, b), stt = d.status(c), w = d.world(c), ds = d.doses(c), dis = d.disagree(c) || [];
+    var h = '<div class="ex-ph"><h3>' + d.icon + ' ' + esc(d.name) + '</h3><span class="ex-tag ' + stt[0] + '">' + esc(stt[1]) + '</span><button type="button" class="ex-x ex-cdel" data-cdel="' + e.id + '" aria-label="Убрать карточку">✕</button></div>' +
+      '<p class="meta">' + [b.ga ? b.ga + ' нед' : 'срок не указан', b.dol ? b.dol + '-е сутки' : 'сутки не указаны', b.w ? 'масса ' + b.w + ' г' : 'масса не указана'].join(' · ') + '</p>';
+    var nums = d.q.filter(function (q) { return q.t === 'num' || q.t === 'txt'; }), rest = d.q.filter(function (q) { return !(q.t === 'num' || q.t === 'txt'); });
+    if (nums.length) h += '<div class="ex-grid">' + nums.map(function (q) { return qHTML(e, q, c); }).join('') + '</div>';
+    h += rest.map(function (q) { return qHTML(e, q, c); }).join('');
+    var ev = d.eval(c) || [];
+    if (ev.length) h += '<div class="ex-eval">' + ev.map(function (x, i) { return '<p' + (i === ev.length - 1 && /^Градации|^Подробная/.test(x) ? ' class="ex-src"' : '') + '>' + esc(x) + '</p>'; }).join('') + '</div>';
     h += '<h4 class="ex-wh">🌍 Как в мире</h4><ul class="ex-world">' + w.map(function (r) {
-      return '<li><div class="ex-wr"><span class="ex-flag">' + r.s.f + '</span><b>' + esc(r.s.c) + '</b><span class="ex-tag ' + (r.tone || '') + '">' + esc(r.v) + '</span></div><p>' + esc(r.t) + '</p>' +
-        (r.s.u ? '<a class="ex-src" href="' + esc(r.s.u) + '" target="_blank" rel="noopener">' + esc(r.s.d) + ' ↗</a>' : '<span class="ex-src">' + esc(r.s.d) + '</span>') + '</li>';
+      var src = r.s.u ? '<a class="ex-src" href="' + esc(r.s.u) + '"' + (r.s.u.charAt(0) === '#' ? '' : ' target="_blank" rel="noopener"') + '>' + esc(r.s.d) + (r.s.u.charAt(0) === '#' ? ' — открыть протокол' : ' ↗') + '</a>' : '<span class="ex-src">' + esc(r.s.d) + '</span>';
+      return '<li><div class="ex-wr"><span class="ex-flag">' + r.s.f + '</span><b>' + esc(r.s.c) + '</b><span class="ex-tag ' + (r.tone || '') + '">' + esc(r.v) + '</span></div>' +
+        (r.q && r.q.length ? '<ul class="ex-qt">' + r.q.map(function (x) { return '<li>«' + esc(x) + '»</li>'; }).join('') + '</ul>' : '') + (r.t ? '<p>' + esc(r.t) + '</p>' : '') + src + '</li>';
     }).join('') + '</ul>' + (dis.length ? '<div class="ex-dis"><b>Где источники расходятся</b>' + dis.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '</div>' : '');
-    if (!c.gate) {
-      h += '<p class="meta ex-l">Противопоказания к ибупрофену (КР РФ 2026)</p><div class="chips ex-ci">' + CI.map(function (x) { return chip('data-pci', x[0], x[1], p.ci[x[0]]); }).join('') + '</div>';
-      h += '<h4 class="ex-wh">💊 Дозы на ' + (c.w ? 'массу ' + c.w + ' г' : '—') + '</h4>' + (ds ? '<ul class="ex-dose">' + ds.map(function (d) {
-        var bad = (d.id !== 'para' && c.ci.length), note = d.id === 'ibuh' && c.ga != null && c.ga < 26;
-        return '<li class="' + (bad ? 'no' : '') + '"><b>' + d.n + '</b>' + (bad ? ' <span class="ex-tag bad">противопоказан</span>' : '') + (note ? ' <span class="ex-tag warn">< 26 нед — осторожно</span>' : '') + '<p>' + d.t + '</p><span class="ex-src">' + esc(d.s) + '</span></li>';
-      }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : '<p class="meta">Укажите массу — посчитаю дозы.</p>');
-    }
-    // тактика
-    h += '<h4 class="ex-wh">Ваше решение</h4><div class="chips ex-tact">' + TACT.map(function (t) { return chip('data-tact', t[0], t[1], p.tact === t[0]); }).join('') + '</div>';
-    if (p.tact) {
-      var j = judge(p.tact, c);
+    if (d.ci && !c.gate) h += qHTML(e, { k: d.ci.k, l: d.ci.l, t: 'multi', o: d.ci.o }, c).replace('class="chips', 'class="chips ex-ci');
+    if (ds !== null || !d.kzOnly) h += ds ? '<h4 class="ex-wh">💊 Дозы на массу ' + b.w + ' г</h4><ul class="ex-dose">' + ds.map(function (x) {
+      return '<li class="' + (x.bad ? 'no' : '') + '"><b>' + esc(x.n) + '</b>' + (x.bad ? ' <span class="ex-tag bad">противопоказан</span>' : '') + (x.note ? ' <span class="ex-tag warn">' + esc(x.note) + '</span>' : '') + '<p>' + x.t + '</p><span class="ex-src">' + esc(x.s) + '</span></li>';
+    }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : (d.doses && !d.kzOnly ? '<p class="meta">Укажите массу — посчитаю дозы.</p>' : '');
+    h += '<h4 class="ex-wh">Ваше решение</h4><div class="chips ex-tact">' + d.tact.map(function (t) { return chip('data-ctact="' + e.id + '" data-v', t[0], esc(t[1]), e.tact === t[0]); }).join('') + '</div>';
+    if (e.tact) {
+      var j = d.judge(e.tact, c);
       if (j.sup.length) h += '<p class="ex-sup">✓ Опора: ' + esc(j.sup.join('; ')) + '</p>';
-      if (j.ag.length) h += '<div class="ex-ag"><b>⚠ ' + (j.hard.length ? 'Отличие от рекомендаций — нужна причина' : 'Расхождение с частью источников') + '</b>' + j.ag.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<textarea id="exWhy" rows="2" class="ctext" placeholder="' + (j.hard.length ? 'Обязательно' : 'По желанию') + ': почему так — например, решение консилиума, нарастание FiO₂ до 45%, олигурия">' + esc(p.why) + '</textarea></div>';
-      h += '<p class="meta">В дневник:</p><blockquote class="ex-q">' + esc(pdaText(E, c)) + '</blockquote>';
+      if (j.ag.length) h += '<div class="ex-ag"><b>⚠ ' + (j.hard.length ? 'Отличие от рекомендаций — нужна причина' : 'Расхождение с частью источников') + '</b>' + j.ag.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<textarea data-cwhy="' + e.id + '" rows="2" class="ctext" placeholder="' + (j.hard.length ? 'Обязательно' : 'По желанию') + ': почему так — например, решение консилиума, нарастание FiO₂, данные посева">' + esc(e.why) + '</textarea></div>';
     }
-    h += '<div class="actions"><button type="button" class="btn ghost" id="exPdaOff">' + (E.pdaOn ? 'Не включать в дневник' : 'Включить в дневник') + '</button></div>';
+    var tx = ctext(E, e);
+    if (tx) h += '<p class="meta">В дневник:</p><blockquote class="ex-q">' + esc(tx) + '</blockquote>';
+    h += '<div class="actions"><button type="button" class="btn ghost" data-coff="' + e.id + '">' + (e.on ? 'Не включать в дневник' : 'Включить в дневник') + '</button></div>';
     return h;
   }
 
@@ -2762,11 +2639,12 @@ body.vopen { overflow: hidden; }
     if (k && k.days && k.days[E.date]) { var e = k.days[E.date]; cur = first ? (e.note || '') : ((e.slotNote || {})[E.slot] || ''); }
     var chk = [];
     if (nNA) chk.push(['warn', '«' + NA + '» — ' + nNA + ' раз. Эксперт увидит пробел; лучше дополнить.']);
-    if (E.pda && E.pdaOn) {
-      var c = pdaCtx(E);
-      if (!E.pda.tact) chk.push(['warn', 'ОАП: тактика не выбрана — в записи будет только описание ЭхоКГ.']);
-      else { var j = judge(E.pda.tact, c); chk.push(j.ag.length ? ((E.pda.why || '').trim() ? ['ok', 'ОАП: отличие от рекомендаций обосновано в записи.'] : ['warn', 'ОАП: расхождение (' + j.ag.join('; ') + '), причина не указана.']) : ['ok', 'ОАП: обоснование со ссылкой на источники в записи.']); }
-    }
+    (E.conds || []).forEach(function (e) {
+      if (!e.on) return; var d = C().by[e.id];
+      if (!e.tact) { if (!d.kzOnly) chk.push(['warn', d.name + ': тактика не выбрана — в записи будет только описание.']); return; }
+      var j = d.judge(e.tact, cctx(E, e));
+      chk.push(j.ag.length ? ((e.why || '').trim() ? ['ok', d.name + ': отличие от рекомендаций обосновано в записи.'] : [j.hard.length ? 'bad' : 'warn', d.name + ': расхождение (' + j.ag.join('; ') + '), причина не указана.']) : ['ok', d.name + ': обоснование со ссылкой на источники в записи.']);
+    });
     var un = (E.hints || []).filter(function (h) { return (h.st === 'diff' || h.st === 'conflict') && !E.justs[h.rule]; });
     if (un.length) chk.push(['bad', 'По протоколам РК без обоснования: ' + un.map(function (h) { return h.title; }).join('; ') + '. Вернитесь на шаг 2 и нажмите «Обосновать».']);
     if (!chk.length) chk.push(['ok', 'Замечаний нет.']);
@@ -2868,7 +2746,7 @@ body.vopen { overflow: hidden; }
     '.ex-fl{font-size:13px;color:var(--muted)}.ex-fld.miss .ex-fl{color:var(--warn);font-weight:600}.ex-fc{gap:6px}.ex-fc button{font-size:13px;padding:6px 10px}' +
     '.ex-in{font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-in,10px);background:var(--card-2);color:var(--ink);width:100%;box-sizing:border-box}.ex-fld.miss .ex-in{border-color:var(--warn);background:var(--warn-bg)}' +
     '.ex-ev{margin:0 0 6px;padding-left:18px}.ex-ev li{margin:3px 0}.ph.ph-done{opacity:.75}' +
-    '.ex-pda{border:1.5px solid #e2a3a3}.ex-pda.off{opacity:.55}.ex-ph{display:flex;align-items:center;gap:8px;justify-content:space-between}.ex-ph h3{margin:0}' +
+    '.ex-cond{border:1.5px solid #c9d6e2}.ex-cond.off{opacity:.55}.ex-cond .ex-cdel{margin-left:auto;font-size:16px;padding:4px 8px}.ex-ph .ex-tag{margin-left:6px}.ex-qt{margin:6px 0 2px;padding-left:16px;font-size:13px;line-height:1.45;color:var(--ink)}.ex-qt li{margin:3px 0;font-style:italic}.ex-addc{margin:10px 0}.ex-addc>.btn{width:100%}#exPick .chips button{font-size:13px}.ex-cq{margin-top:2px}.ex-ph{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.ex-ph h3{margin:0}' +
     '.ex-tag{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;background:var(--line);color:var(--ink);white-space:nowrap}.ex-tag.ok{background:#e3f4e8;color:#1e7a3c}.ex-tag.warn{background:var(--warn-bg);color:var(--warn)}.ex-tag.bad{background:var(--bad-bg,#fde8e8);color:var(--bad,#b3261e)}' +
     '.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.ex-grid label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}' +
     '.ex-gate{margin-top:10px}.ex-gate button[aria-pressed=true]{background:var(--bad-bg,#fde8e8);color:var(--bad,#b3261e);border-color:var(--bad,#b3261e)}' +
@@ -2886,7 +2764,640 @@ body.vopen { overflow: hidden; }
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 90); }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', function () { setTimeout(tick, 160); });
   setTimeout(tick, 700);
-  window.__neoExpress = { open: open, parse: parse, build: build, world: world, judge: judge, doses: doses, ctx: pdaCtx, state: function () { return E; }, events: eventPhrases };
+  window.__neoExpress = { open: open, parse: parse, build: build, cctx: cctx, ctext: ctext, state: function () { return E; }, events: eventPhrases };
+})();
+</script>
+<script id="conds">
+/* НеоДневник Pro — карточки заболеваний для экспресс-дневника.
+   Карточка: что сказано → вопросы кнопками → оценка → «как в мире» (РК, РФ, США, Европа…) → дозы на массу →
+   решение врача → абзац в дневник с обоснованием. Расхождение с протоколом РК или с безопасностью требует причины.
+   Цитаты протоколов РК дословные (проверяются тестом по тексту протоколов приложения). */
+(function () {
+  var KZD = [{"id": "asfiksiya-pri-rozhdenii", "n": "Асфиксия при рождении", "no": "180", "d": "17 марта 2023", "doses": []}, {"id": "bld", "n": "БЛД (бронхолёгочная дисплазия)", "no": "210", "d": "28 июня 2024", "doses": ["Парентеральная дотация - введение аминокислот из расчета белка 3-3,5 г/кг в сутки и жировых эмульсий из расчета 2-3 г/кг в сутки, витаминов и нутриентов.", "Потребность в жидкости до достижения массы тела 2000 грамм― 130-150 мл/кг/сут, уменьшается к концу первого года жизни (100 мл/кг/сут).", "Кофеин цитрат (3мл) в/в 20 мг/кг – в первые сутки жизни (доза насыщения), 5-10мг/кг – поддерживающая доза (при частоте сердечных сокращений более 180 уд/мин снизить поддерживающую дозу кофеина с 10 до 5 мг/кг.", "Поддерживающая доза 5 мг/кг тела может быть введена внутрь (через рот) при помощи назогастрального зонда каждые 24 ч.", "Фуросемид 0,5‑1 мг/кг/сут внутривенно, или 2 мг/кг/сут внутрь, разделив дозу на 1‑3 раза.", "Спиронолактон 2-4 мг/кг/сут внутрь в два приема (во второй половине дня)."]}, {"id": "vrozhdennaya-pnevmoniya", "n": "Врожденная пневмония", "no": "10", "d": "4 июля 2014", "doses": ["бактериемия - 25000-50000ЕД/кг/доза в/в (в течение 15мин);", "СГБ менингит - 450000 ЕД/кг/в сутки в/в;", "цефатоксим - 50 мг/кг/доза в/в течение 30 мин.", "ампициллин 50мг/кг;100 мг/кг (сепсис, менингит) медленно в/;", "ванкомицин 15 мг/кг однократно, затем по 10 мг/кг (разовая доза) каждые 12 часов, вводится в растворе глюкозы в течение 1 часа;", "гентамицин 4-5 мг/кг в/в течение 30 мин, через 48 час, ампулы по 2,0 мл – 80,0 мг."]}, {"id": "gbn", "n": "ГБН (гемолитическая болезнь)", "no": "92", "d": "30 апреля 2020", "doses": ["Приложение 2 Стандартная ОЗПК (замена 160-180 мл/кг крови ребенка на одногруппную эритроцитарную массу Rh-отриц.", "доза - 0,5-1,0 г/кг (в среднем 0,8 г/кг);", "донорская кровь и (или) ее компоненты при ОЗПК переливаются из расчета 160-180 мл/кг массы тела для доношенного ребенка и 170-180 мл/кг для недоношенного.", "V общий = m×ОЦК×2, где V- объем, m- масса тела в кг, ОЦК – для недоношенных – 100-110 мл/кг, для доношенных – 80-90 мл/кг.", "объем одного замещения (однократного выведения крови) и одного восполнения (однократного введения компонентов крови) не должен превышать 5 мл/кг под обязательным контролем показателей гемодинамики, дыхания и функции почек;", "Частичное заменое переливание осуществляется с заменой 45-90 мл/кг крови ребенка на аналогичный объем эритроцитарной массы 0 (I) резус-отрицательной группы."]}, {"id": "gie", "n": "ГИЭ (гипоксически-ишемическая энцефалопатия)", "no": "74", "d": "03 октября 2019", "doses": []}, {"id": "gemorragicheskaya-bolezn", "n": "Геморрагическая болезнь", "no": "1", "d": "21 января 2014", "doses": ["Всем новорожденным с нарушением гемостаза, которые не получили витамин К на момент рождения, необходимо ввести витамин К из расчета 100 мкг/кг внутримышечно.", "Если протромбиновое и активированное частичное тромбопластиновое время находятся за пределами верхней границы нормы, необходимо ввести СЗП внутривенно в течение 30 минут из расчета 10-15 мл/кг.", "Если отсутствует эффект после введения СЗП, применяют криопреципитат из расчета 5 мл/кг в течение 30 минут."]}, {"id": "giperammoniemiya", "n": "Гипераммониемия", "no": "220", "d": "28 ноября 2024", "doses": ["ограничения в пищевом рационе потребления животного белка до 0,5-0,6 г/кг в сутки для обеспечения отрицательного азотистого баланса/", "Рекомендуемое суточное потребление белка зависит от возраста и колеблется от 2–2,5 г/кг в день при рождении до менее 0,6–0,8 г/кг в день у детей старшего возраста.", "аминокислоты: от 1,5 до 1,75 г/кг белка в день в виде раствора  аминокислот.", "Поддерживающая доза: Непрерывная внутривенная инфузия: 2,5 мл/кг в виде поддерживающей инфузии в течение 24 часов (обеспечивает 250 мг/кг фенилацетата натрия и 250 мг/кг бензоата натрия в течение 24 часов).", "Аминокислоты Гидрохлорид Стартовая доза вводится A аргинина* внутривенно в течение 90 минут в 10% растворе глюкозы из расчета 25–35 мл/кг:  Для пациентов с массой тела ≤20 кг составляет 200 мг/кг,.", "составляет для пациентов:  с массой тела ≤20 кг – 200 мг/кг в сутки;"]}, {"id": "gipotermiya-lechebnaya", "n": "Гипотермия лечебная", "no": "10", "d": "4 июля 2014", "doses": []}, {"id": "gipotermiya-cepochka", "n": "Гипотермия цепочка", "no": "10", "d": "4 июля 2014", "doses": []}, {"id": "diabeticheskaya-fetopatiya", "n": "Диабетическая фетопатия", "no": "27", "d": "15 сентября 2017", "doses": ["Повторить ГК ч-з 3 часа антагонисты инсулина – глюкагон в дозе 0,1 мг/кг", "Прекратить контроль УГК При отсутствии эффекта, особенно при сочетании с надпочечниковой недостаточностью, применяют гидрокортизон 5-10 мг/кг/сут.", "или преднизолон 2-3 мг/кг/сут."]}, {"id": "ispolzovanie-preparatov-donorskoy-krovi", "n": "Препараты донорской крови", "no": "185", "d": "28 июля 2023", "doses": ["доношенного ребенка - 80 мл/кг;", "недоношенного ребенка (ОНМТ, ЭНМТ) - 100 мл/кг.", "Переливание больших объемов ЭМ новорожденным, эквивалентное одному объему циркулирующей крови (примерно 80 мл/кг) также используется в неонатальной кардиохирургии.", "скорость введения до 6 мл/кг/час (для переливания 20 мл/кг) или 5", "мл/кг/час (для переливания 15 мл/кг), продолжительность трансфузии при этом составляет 4 часа (но не более) под обязательным контролем показателей гемодинамики и дыхания.", "расчетный объем крови пациента выражается в мл/кг – он уменьшается с возрастом от 100-120 мл/кг: у крайне недоношенных детей до 80–85 мл/кг, а у доношенных детей - около 70 мл/кг;"]}, {"id": "krestcovookopchikovaya-teratoma", "n": "Крестцово-копчиковая тератома", "no": "238", "d": "28 августа 2025", "doses": ["повторно через 4 часа, если процедура длится >4 часов Антибиотикопрофилактика: 50 мг/кг в течение 60 минут до разреза;", "максимальная доза: 1500 мг/доза Антибиотикопрофилактика: 10-15 мг/кг однократно в течение 30-60 Антибактериальные B Ванкомицин минут до хирургического средства разреза;", "повторно через 4 часа, если процедура длится >4 часов Внутривенно Гестационный возраст 32 недели и более: 12,5 мг/кг/доза внутривенно каждые 6 часов до МАКС 50 мг/кг/день при всех путях введения.", "Поддерживающая доза: 12–15 мг/кг Нестероидные массы тела.", "Поддерживающая доза: 12–18 мг/кг массы тела.", "инфузионная терапия – от 140 мл/кг/сут и проведение полного ППП;"]}, {"id": "nek-pediatriya", "n": "НЭК (педиатрия, дети старше периода н/р)", "no": "154", "d": "23 декабря 2021", "doses": ["энтеральное вскармливание начинают с объема 10 мл/кг/сутки с контролем усвоения, без наращивания в течение первых трех суток;", "у недоношенных новорожденных начинать внутривенное введение жидкости по 70-80 мл/кг в день с поддержанием в инкубаторе повышенной влажности (60- 80%) для снижения неощутимых потерь жидкости и развития гиповолемии;", "при снижении диуреза менее 1 мл/кг/час назначается фуросемид в дозе 1 мг/кг под контролем диуреза;", "При снижении уровня электролитов в сыворотке крови внутривенно вводится натрий 1-2 мэкв/кг/сутки, калий 1-3 ммоль/кг/сутки, кальций 2 ммоль/кг/сутки.", "при ДВС – синдроме проводится переливание свежезамороженной плазмы 10-15 мл/кг;", "при тромбоцитопении <30×10 /л назначается тромбоцитарная масса 10-15 мл/кг;"]}, {"id": "nek", "n": "НЭК", "no": "185", "d": "28 июля 2023", "doses": ["энтеральное питание начать с объема минимального трофического питания 5-10 мл/кг/сут материнского или пастеризованного грудного молока;", "расширение объема энтерального кормления проводится на 5 мл/кг/сутки.", "у недоношенных новорожденных начинать внутривенное введение жидкости по 70-80 мл/кг в день с поддержанием в инкубаторе повышенной влажности (60-80%) для снижения неощутимых потерь жидкости и развития гиповолемии;", "при снижении уровня электролитов в сыворотке крови внутривенно вводится натрий 1-2 мэкв/кг/сутки, калий 1-3 ммоль/кг/сутки, кальций 2 ммоль/кг/сутки;", "при снижении диуреза менее 1 мл/кг/час назначается фуросемид в дозе 1 мг/кг под контролем диуреза;", "при ДВС – синдроме проводится переливание свежезамороженной плазмы 10-15 мл/кг;"]}, {"id": "neonatalnaya-zheltuha", "n": "Неонатальная желтуха", "no": "171", "d": "06 октября 2022", "doses": ["доза – 0,5 – 1,0 г/кг (в среднем 0,8 г/кг);"]}, {"id": "parenteralnoe-pitanie", "n": "Парентеральное питание", "no": "185", "d": "28 июля 2023", "doses": ["Для недоношенных детей, рожденных при сроке гестации ˂28 недель возможность прекращения парентерального питания, рассматривается в течение 24 часов после того, как объем энтерального питания достиг 140 – 150 мл/кг/сут.", "У недоношенных детей парентеральное введение аминокислот выше 3,5 г/кг/сут следует назначать только в рамках клинических испытаний.", "Минимальное потребление аминокислот 1,5 г/кг/день следует обеспечить стабильным доношенным детям, чтобы избежать отрицательного баланса азота, в то время как максимальное потребление аминокислот не должно превышать 3,0 г/кг/день.", "Для обеспечения потребности в аминокислотах: – недоношенным новорожденным следует вводить биодоступный цистеин (50–75 мг/кг/сут).", "нижний предел потребления тирозина для недоношенных детей должен составлять не менее 18 мг/кг/сутки.", "рекомендуемое потребление тирозина доношенным детям составляет 94 мг/кг в день."]}, {"id": "policitemiya", "n": "Полицитемия", "no": "27", "d": "15 сентября 2017", "doses": ["ОЦК = 3кг х 80 мл/кг=240 мл.", "Примечание: ОЦК для доношенного ребенка 80-90 мл/кг, для недоношенного ребенка 90-100 мл/кг."]}, {"id": "poroki-razvitiya-diafragmy", "n": "Пороки развития диафрагмы", "no": "231", "d": "28 мая 2025", "doses": ["Введение жидкости под контролем уровня глюкозы и диуреза:  в первые сутки в дозе 80 мл/кг в сутки;", " в последующие дни при адекватном диурезе и гемодинамики с увеличением на 20 мл/кг/сутки Расчет инфузии проводится на чистый сухой вес ребенка.", "Общие принципы парентерального питания с первых суток жизни:  белок (начиная с 1,5 г/кг/сут, с увеличением до 3,5 г/кг/сут);", " жиры (начиная с 1,0 г/кг/сут, с увеличением до 3,0 г/кг/сут);", " углеводы (скорость утилизации 6-12 мг/кг/мин).", "Предпочтение отдается кристаллоидным растворам:  раствор натрия хлорида 0,9% в дозе 10 – 15 мл/кг/болюсно в течение 30 – 60 минут"]}, {"id": "rds", "n": "РДС (респираторный дистресс-синдром)", "no": "4", "d": "9 июня 2016", "doses": ["для лечения РДС порактант альфа в начальной дозе 200 мг/кг лучше, чем 100 мг/ кг того же препарата или берактанта;", "Кофеин цитрат вводится в дозе насыщения 20 мг/кг, далее 5-10 мг/кг/сутки – поддерживающая доза.", "большинству недоношенных новорожденных должно быть начатовнутривенное введение жидкостей по 70-80 мл/кг в день, с поддержанием повышенной влажности в инкубаторе 60-80%;", "парентеральное питание следует начинать с 1-го дня во избежание замедления роста и предусмотреть раннее введение белков, начиная с 3,5 г/кг/день и липидов 3,0 г/кг/день для поддержания должного количества калорий.", "восполнение ОЦК при гипотензии рекомендуется проводить 0,9% раствором хлорида натрия по 10-20 мл/кг, если была исключена дисфункция миокарда;", "если восстановлением ОЦК не удается удовлетворительно повысить давление крови, необходимо ввести допамин (2-10 мкг/кг/мин);"]}, {"id": "reanimaciya-nedonoshennyh-detey", "n": "Реанимация недоношенных детей", "no": "10", "d": "30 сентября 2015", "doses": ["●Рекомендуемая доза адреналина при внутривенном (предпочтительно) введении новорожденным – 0,01-0,03 мг/кг.", "●При эндотрахеальном введении 1-й дозы адреналина, пока идет подготовка венозного доступа, рекомендуется всегда использовать большую дозу от 0,05 до 0,1 мг/кг.", "дозы, улучшение состояния ребенка не происходит, может потребоваться введение второй дозы раствора в том же объеме (10 мл/кг)."]}, {"id": "reanimaciya-novorozhdennyh", "n": "Реанимация новорожденных", "no": "180", "d": "17 марта 2023", "doses": ["Рекомендуемая доза эпинефрина при внутривенном введении новорожденным 20 мкг/кг веса (0,2 мл/кг веса в концентрации 1:10 000).", "Эндотрахеальное введение эпинефрина 0,1 мг/кг (1,0мл/кг).", "Раствор для восполнения ОЦК вводится в пупочную вену в дозе 10-20 мл/кг струйно медленно в течение около 5-10 минут."]}, {"id": "retinopatiya", "n": "Ретинопатия", "no": "166", "d": "05 августа 2022", "doses": []}, {"id": "rodovaya-travma", "n": "Родовая травма", "no": "35", "d": "14 декабря 2017", "doses": []}, {"id": "sepsis", "n": "Сепсис", "no": "185", "d": "28 июля 2023", "doses": ["Снижение скорости диуреза, менее 0,5 мл/кг/ч в 1-е сутки жизни и менее 1 мл/час/кг в возрасте старше 1 суток жизни.", "Бензилпенициллин назначается в дозе 25 мг/кг через каждые 12 часов.", "Гентамицин вводится в начальной дозе 5 мг/кг, при этом следует помнить, что: a.", "в перечне характеристик препарата рекомендуется дозировка от 4 до 7 мг/кг/день, вводимая в разовой дозе;", "данные, рассмотренные для руководства, поддерживают начальную дозу 5 мг/кг каждые 36 часов, вводимую однократно;", "группы B, следует рассмотреть возможность изменения лечения антибиотиками на: – бензилпенициллин 50 мг/кг каждые 12 часов, обычно в течение не менее 14 дней и – гентамицин, с начальной дозой 5 мг/кг каждые 36 часов;"]}, {"id": "stoykoe-fetalnoe-kroobraschenie", "n": "Стойкое фетальное кровообращение (ПЛГН)", "no": "4", "d": "9 июня 2016", "doses": ["доза: 0,005-0,02 мкг/кг/мин.", "Поддерживающая доза 0,375-0,75 мкг/кг/мин.", "Неселективные вазодилататоры Магния сульфат 250 мг/кг/30 минут Поддерживаю A щая доза 10", "натрия в крови Раствор магния сульфата 0,2 мл/кг/сут A 25%.", "Раствор калия хлорида 7,5% 1 ммоль/кг A Гепарин 1 Ед.", "парентерального питания Седативные препараты Диазепам 0,5% в/в болюсно каждые 6 A по 0,1-0,25 мг/кг часов Мидазолам 0,5% – в/в болюсно каждые 2-4 A 0,05-0,15 мг/кг часа или в/в капельно 0,1-0,6 мг/кг/сут."]}, {"id": "uhod-za-malovesnymi", "n": "Уход за маловесными", "no": "177", "d": "13 января 2023", "doses": ["SNSS < 2 один раз в сутки смазать подсолнечным маслом (4,4 мл /кг веса ≙4 г/кг веса)."]}, {"id": "uhod-za-rebenkom", "n": "Уход за ребенком", "no": "10", "d": "4 июля 2014", "doses": []}, {"id": "cmv", "n": "ЦМВ-инфекция", "no": "185", "d": "28 июля 2023", "doses": ["при вЦМВ инфекции – после выписки из стационара специфическое лечение продолжают валганцикловиром в разовой дозе 16 мг/кг 2 раза в сутки, общая длительность курса до 6 мес;", "При необходимости для предупреждения отдаленных последствий, связанных с потерей слуха решается консилиумом врачей и назначается валганцикловир длительностью 6 недель в разовой дозе 16 мг/кг 2 раза в сутки;", "при ЦМВ инфекции новорожденных с изолированным поражением ЦНС, специфическое лечение валганцикловиром, направленное на снижение вирусной нагрузки продолжается в разовой дозе 16 мг/кг 2 раза в сутки до 6-8 недель.", "Антицитомегаловирусный иммуноглобулин человека, 1 мл которого содержит 100 МЕ нейтрализующей активности, может назначаться одновременно с противовирусными препаратами внутривенно в дозе 1 мл/кг массы тела каждые"]}, {"id": "enteralnoe-pitanie", "n": "Энтеральное питание", "no": "177", "d": "13 января 2023", "doses": ["Рекомендуется начинать обогащение грудного молока при достижении объема питания 100 мл/кг.", "следует начинать как можно раньше после родов по 1 мл/кг/на кормление через 1-2 часа или 24 мл/кг/день.", "Скорректированный до 33 недель беременности: 15–22 г/кг/день.", "Скорректированный срок беременности 33–37 недель: 10–15 г/кг/день."]}];
+  var N = function () { return window.__neo || {}; };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var norm = function (s) { return String(s || '').toLowerCase().replace(/ё/g, 'е'); };
+  var num = function (s) { if (s == null || s === '') return null; var v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? null : v; };
+  var fmt = function (v, d) { if (v == null || isNaN(v)) return ''; var p = Math.pow(10, d == null ? 1 : d); return String(Math.round(v * p) / p).replace('.', ','); };
+  var cap = function (s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  var grab = function (low, re) { var m = re.exec(low); return m ? m[1] : null; };
+  var kzById = {}; KZD.forEach(function (p) { kzById[p.id] = p; });
+  var kzDoc = function (id, full) { var p = kzById[id]; return p ? 'КП МЗ РК «' + (full || p.n) + '» №' + p.no + ' от ' + p.d : 'КП МЗ РК'; };
+
+  /* ================= ИСТОЧНИКИ ================= */
+  var S = {
+    ruPda: { f: '🇷🇺', c: 'Россия', d: 'КР «Гемодинамически значимый артериальный проток у недоношенного новорождённого», РОН и АСПМ, 2026', u: 'https://medpoint.pro/article/gemodinamicheski-znachimii-arterialnii-protok-u-nedonoshennogo-novorozhdennogo-2420', s: 'КР РФ «ГЗФАП у недоношенного новорождённого» (2026)' },
+    usPda: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Report «Patent Ductus Arteriosus in Preterm Infants», Pediatrics 2025', u: 'https://doi.org/10.1542/peds.2025-071425', s: 'клинический отчёт AAP «Patent Ductus Arteriosus in Preterm Infants» (Pediatrics, 2025)' },
+    caPda: { f: '🇨🇦', c: 'Канада', d: 'CPS Position Statement «Management of the PDA in preterm infants», Paediatr Child Health 2022', u: 'https://cps.ca/documents/position/patent-ductus-arteriosus', s: 'позиция Канадского общества педиатров (CPS, 2022)' },
+    eu: { f: '🇪🇺', c: 'Европа', d: 'European Consensus Guidelines on the Management of RDS: 2025, Neonatology 2026', u: 'https://doi.org/10.1159/000551062', s: 'Европейский консенсус по РДС (2025)' },
+    rctPda: { s: 'РКИ NICHD PDA Trial (JAMA, 2025)', u: 'https://doi.org/10.1001/jama.2025.23330' },
+    elg: { f: '🌐', c: 'ELGANS', d: 'Early Screening of ELGANS — алгоритм из вашего материала по гемодинамике', u: '', s: 'алгоритм раннего скрининга ЭКН (Early Screening of ELGANS)' },
+    ruRds: { f: '🇷🇺', c: 'Россия', d: 'КР «Синдром дыхательного расстройства у новорождённого», РОН и АСПМ, 2025', u: 'https://medpoint.pro/article/sindrom-dikhatelnogo-rasstroistva-u-novorozhdennogo-2235', s: 'КР РФ «Синдром дыхательного расстройства у новорождённого» (2025)' },
+    caRds: { f: '🇨🇦', c: 'Канада', d: 'CPS «Guidelines for surfactant replacement therapy in neonates», Paediatr Child Health 2021', u: 'https://cps.ca/documents/position/guidelines-for-surfactant-replacement-therapy-in-neonates', s: 'рекомендации CPS по сурфактантной терапии (2021)' },
+    ukSep: { f: '🇬🇧', c: 'Великобритания', d: 'NICE NG195 «Neonatal infection: antibiotics for prevention and treatment» (2021, обновл. 2026)', u: 'https://www.nice.org.uk/guidance/NG195/chapter/antibiotics-for-early-onset-neonatal-infection', s: 'NICE NG195 (2021, обновл. 2026)' },
+    usSep: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Reports (Puopolo et al.) по раннему сепсису ≥ 35 и ≤ 34 6/7 нед, Pediatrics 2018', u: 'https://doi.org/10.1542/peds.2018-2896', s: 'клинические отчёты AAP по раннему сепсису (Pediatrics, 2018)' },
+    ruSep: { f: '🇷🇺', c: 'Россия', d: 'КР «Сепсис новорождённых», РОН, 2025 (ID 912_1)', u: 'https://pravo.ppt.ru/klinicheskie-rekomendatsii/313771', s: 'КР РФ «Сепсис новорождённых» (2025)' },
+    msdNec: { f: '🇺🇸', c: 'США', d: 'MSD Manual Professional «Некротический энтероколит», обновл. 08.2025 (справочник, не клинические рекомендации)', u: 'https://www.msdmanuals.com/ru-ru/professional/педиатрия/желудочно-кишечные-расстройства-у-новорожденных-и-младенцев/некротический-энтероколит', s: 'справочник MSD (2025)' },
+    ukHypo: { f: '🇬🇧', c: 'Великобритания', d: 'BAPM Framework «Identification and Management of Neonatal Hypoglycaemia in the Full Term Infant», 2024', u: 'https://hubble-live-assets.s3.eu-west-1.amazonaws.com/bapm/file_asset/file/2864/Identification_and_Management_of_Neonatal_Hypoglycaemia_Sept_24.pdf', s: 'BAPM Framework for Practice по гипогликемии (2024)' },
+    usHypo: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Report «Postnatal Glucose Homeostasis in Late-Preterm and Term Infants», Pediatrics 2011', u: 'https://doi.org/10.1542/peds.2010-3851', s: 'клинический отчёт AAP (Adamkin, Pediatrics, 2011)' },
+    usChd: { f: '🇺🇸', c: 'США', d: 'AAP Clinical Report «Newborn Screening for CCHD: A New Algorithm», Pediatrics 2025', u: 'https://doi.org/10.1542/peds.2024-069667', s: 'клинический отчёт AAP по скринингу критических ВПС (2025)' },
+    auChd: { f: '🇦🇺', c: 'Австралия', d: 'Royal Children’s Hospital Melbourne, Neonatal Medication Guideline «Alprostadil» (протокол клиники)', u: 'https://www.rch.org.au/piper/neonatal_medication_guidelines/Alprostadil_(Prostin_VR)_–_(Prostaglandin_E1)/', s: 'протокол RCH Melbourne по алпростадилу' },
+    stChd: { f: '📊', c: 'Исследования', d: 'Vari D и др., Cardiol Young 2020: старт PGE1 с 0,01 мкг/кг/мин', u: 'https://www.cambridge.org/core/journals/cardiology-in-the-young/article/lowdose-prostaglandin-e1-is-safe-and-effective-for-critical-congenital-heart-disease-is-it-time-to-revisit-the-dosing-guidelines/D5088CD79C754F6313F983B758729981', s: 'исследование низких доз PGE1 (Cardiol Young, 2020)' }
+  };
+  function kzS(id, full) { return { f: '🇰🇿', c: 'Казахстан', d: kzDoc(id, full), u: '#protocol-' + id, s: kzDoc(id, full), kz: 1 }; }
+
+  /* ================= ОБЩЕЕ ================= */
+  var SEV = ['', 'лёгкая', 'умеренная', 'тяжёлая'];
+  function hd(c, t) { return t; }
+  function both(a, b) { return a.concat(b); }
+  function J(sup, ag, softRe) { var hard = ag.filter(function (x) { return !(softRe || /^(AAP|CPS|NICE|BAPM|процедурное)/).test(x); }); return { sup: sup, ag: ag, hard: hard }; }
+  function line(def, c, t, why) {
+    var j = def.judge(t, c), s = [];
+    if (def.kzNone) s.push(def.kzNone);
+    if (j.sup.length) s.push('тактика соответствует: ' + j.sup.join('; '));
+    var l = s.length ? 'Обоснование: ' + s.join('; ') + '.' : '';
+    if (j.ag.length && (why || '').trim()) l += (l ? ' ' : '') + 'Отличие от рекомендаций (' + j.ag.join('; ') + ') обосновано: ' + why.trim().replace(/[.\s]+$/, '') + '.';
+    else if (!j.sup.length && (why || '').trim()) l += (l ? ' ' : '') + 'Обоснование: ' + why.trim().replace(/[.\s]+$/, '') + '.';
+    return l;
+  }
+
+  /* ================= ОАП ================= */
+  var PDA = {
+    id: 'pda', icon: '❤️', name: 'ОАП', kzNone: 'отдельный протокол МЗ РК по ОАП у недоношенных отсутствует',
+    kw: /(?:^|[^а-я])оап(?![а-я])|открыт[а-я]* артериальн[а-я]* проток|артериальн[а-я]* проток|(?:^|[^а-я])пда(?![а-я])|\bpda\b|гзфап/,
+    skip: /оап\s+(?:нет|не выявлен|закрыт)|проток[а-я]*\s+(?:закрыт|не функционир)/,
+    init: function (low) {
+      var st = { d: num(grab(low, /(?:оап|проток[а-я]*|пда|\bpda\b)[^.;]{0,40}?(\d(?:[.,]\d{1,2})?)\s*мм/)), lpao: num(grab(low, /(?:лп\s*\/\s*ао|лп\s*к\s*ао|лп на ао|la\s*\/\s*ao)\s*[-–:]?\s*(\d(?:[.,]\d{1,2})?)/)), clin: {}, ci: {} };
+      if (/справа\s*налево|право\s*[-–]?\s*лев[а-я]*|(?:^|[^а-я])п\s*[-–>→]\s*л(?![а-я])/.test(low)) st.dir = 'rl';
+      else if (/двунаправ[а-я]*|бидирекц[а-я]*|перекрестн[а-я]*/.test(low)) st.dir = 'bi';
+      else if (/слева\s*направо|лево\s*[-–]?\s*прав[а-я]*|(?:^|[^а-я])л\s*[-–>→]\s*п(?![а-я])/.test(low)) st.dir = 'lr';
+      if (/реверс[а-я]*|ретроградн[а-я]*/.test(low)) st.diast = 'rev'; else if (/диастол[а-я]*[^.;]{0,30}(?:снижен|отсутств|нулев)/.test(low)) st.diast = 'low';
+      return st;
+    },
+    q: [
+      { k: 'd', l: 'Диаметр, мм', t: 'num', half: 1 }, { k: 'lpao', l: 'ЛП/Ао', t: 'num', half: 1 },
+      { k: 'dir', l: 'Сброс', t: 'one', o: [['lr', 'слева направо'], ['bi', 'двунаправленный'], ['rl', 'справа налево']] },
+      { k: 'diast', l: 'Диастолический кровоток в нисходящей аорте', t: 'one', o: [['norm', 'сохранён'], ['low', 'снижен / нулевой'], ['rev', 'реверсивный']] },
+      { k: 'clin', l: 'Клиника', t: 'multi', o: [['hypo', 'Гипотензия'], ['olig', 'Олигурия'], ['ino1', '1 инотроп/вазопрессор'], ['ino2', '2 и более'], ['feed', 'Непереносимость кормления'], ['hem', 'Лёгочное кровотечение']] },
+      { k: 'gate', l: '⚠ ЛГ или подозрение на проток-зависимый ВПС', t: 'flag', bad: 1 }
+    ],
+    ci: { k: 'ci', l: 'Противопоказания к ибупрофену (КР РФ 2026)', o: [['sepsis', 'Нелеченый сепсис'], ['bleed', 'Кровотечение / коагулопатия'], ['ivh', 'ВЖК II–III с нарастанием'], ['uo', 'Диурез < 0,6 мл/кг/ч за 8 ч'], ['cr', 'Креатинин ≥ 132 мкмоль/л'], ['plt', 'Тромбоциты < 60×10⁹/л'], ['nec', 'Подозрение на НЭК / хирургию живота'], ['bili', 'Гипербилирубинемия, нужна ЗПК'], ['co', 'Сейчас аминогликозиды или системные стероиды']] },
+    ctx: function (st, b) {
+      var fio2 = num(b.f.fio2), mk = b.f.modeK, sev = null, why = [];
+      if (mk || fio2 != null || Object.keys(st.clin).some(function (x) { return st.clin[x]; })) {
+        sev = 1;
+        if (fio2 != null && fio2 >= 30) { sev = 2; why.push('FiO₂ ' + fio2 + '%'); }
+        if (mk === 'niv' && num(b.f.map) > 8) { sev = 2; why.push('неинвазивная ИВЛ, MAP > 8'); }
+        if (st.clin.olig) { sev = Math.max(sev, 2); why.push('олигурия'); }
+        if (st.clin.ino1) { sev = Math.max(sev, 2); why.push('1 инотроп'); }
+        if (fio2 != null && fio2 > 50) { sev = 3; why.push('FiO₂ > 50%'); }
+        if (mk === 'inv') { sev = 3; why.push('инвазивная ИВЛ'); }
+        if (st.clin.hem) { sev = 3; why.push('лёгочное кровотечение'); }
+        if (st.clin.ino2) { sev = 3; why.push('2 инотропа'); }
+      }
+      var d = num(st.d), lp = num(st.lpao);
+      var dsev = d == null ? null : d < 1.5 ? 1 : d <= 2.5 ? 2 : 3, over = lp == null ? null : lp >= 1.5, hypo = st.diast ? st.diast !== 'norm' : null, hs = null, miss = [];
+      if (st.dir && st.dir !== 'lr') hs = false; else if (d != null && d <= 1.5) hs = false;
+      else { if (d == null) miss.push('диаметр'); if (!st.dir) miss.push('направление сброса'); if (over == null) miss.push('ЛП/Ао'); if (hypo == null) miss.push('диастолический кровоток в аорте'); if (!miss.length) hs = !!(over && hypo); }
+      var ci = Object.keys(st.ci).filter(function (x) { return st.ci[x]; });
+      return { ga: b.ga, dol: b.dol, w: b.w, d: d, lpao: lp, sev: sev, sevWhy: why, dsev: dsev, hs: hs, miss: miss, ci: ci, gate: !!(st.gate || (st.dir && st.dir !== 'lr')), renal: ci.some(function (x) { return x === 'plt' || x === 'cr' || x === 'uo'; }), st: st };
+    },
+    status: function (c) { return c.gate ? ['bad', 'Не закрывать'] : c.hs === true ? ['warn', 'ГЗФАП' + (c.sev ? ' · ' + SEV[c.sev] : '')] : c.hs === false ? ['ok', 'Не значимый'] : ['', 'Значимость не ясна']; },
+    eval: function (c) {
+      var ev = [];
+      if (c.dsev) ev.push('По диаметру: ' + SEV[c.dsev] + ' (< 1,5 / 1,5–2,5 / > 2,5 мм).');
+      if (c.sev) ev.push('Клинически: ' + SEV[c.sev] + (c.sevWhy.length ? ' — ' + c.sevWhy.join(', ') : '') + '.');
+      if (c.hs == null && !c.gate && c.miss.length) ev.push('Для вывода о значимости не хватает: ' + c.miss.join(', ') + '.');
+      if (c.hs === true) ev.push('ГЗФАП по КР РФ: диаметр > 1,5 мм, сброс слева направо, перегрузка малого круга (ЛП/Ао ≥ 1,5) и системная гипоперфузия.');
+      ev.push('Градации — КР РФ 2026; критерии значимости не едины, решение по совокупности ЭхоКГ и клиники.');
+      return ev;
+    },
+    world: function (c) {
+      var out = [], early = c.dol != null && c.dol < 14;
+      out.push({ s: { f: '🇰🇿', c: 'Казахстан', d: 'Клинические протоколы МЗ РК', u: '' }, v: 'Протокола нет', t: 'Отдельного клинического протокола МЗ РК по ОАП у недоношенных нет ни в базе «Антидефекта», ни в открытом поиске. Тактику решает врач или консилиум, обоснование со ссылкой на источник добавится в запись.' });
+      if (c.gate) {
+        out.push({ s: S.ruPda, v: 'Не закрывать', tone: 'bad', t: 'Абсолютное противопоказание к медикаментозному закрытию: проток-зависимый кровоток при ВПС, персистирующая лёгочная гипертензия.' });
+        out.push({ s: S.elg, v: 'Лечить причину', tone: 'bad', t: 'ЛГ — лёгочные вазодилататоры; дисфункция миокарда — инотропы; критический ВПС — простагландин E1, проток держат открытым.' });
+        return out;
+      }
+      var ru;
+      if (c.hs === false && !(c.dsev >= 2)) ru = { v: 'Наблюдение', t: 'Критериям ГЗФАП не соответствует (нужны: диаметр > 1,5 мм, сброс слева направо, ≥ 1 признак перегрузки малого круга и ≥ 1 признак системной гипоперфузии). Медикаментозная профилактика не рекомендуется.' };
+      else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol < 3) ru = { v: 'Пока ждать', t: 'Медикаментозная профилактика не рекомендуется. При ≤ 26 нед ранняя целевая терапия возможна на 3–6-е сутки при тяжёлом или умеренном (с клиникой) ГЗФАП, по решению консилиума (B).' };
+      else if (c.ga != null && c.ga < 26 && c.dol != null && c.dol <= 6) ru = { v: c.sev >= 2 || c.dsev === 3 ? 'Ранняя терапия по консилиуму' : 'Наблюдение', tone: c.sev >= 2 || c.dsev === 3 ? 'warn' : '', t: 'Срок < 26 нед, 3–6-е сутки: ранняя целевая терапия при тяжёлой или умеренной (с клиникой) степени — по решению консилиума (B). Препарат первой линии — ибупрофен (B).' };
+      else if (c.dol != null && c.dol <= 7) ru = { v: 'Выжидательная', t: 'После 26 нед в первые 7 суток медикаментозную терапию не назначают; при ≥ 28 нед — выжидательная тактика с ЭхоКГ в динамике.' };
+      else ru = { v: c.hs ? 'Симптоматическая терапия' : 'По ЭхоКГ', tone: c.hs ? 'warn' : '', t: 'После 7 суток при ГЗФАП: ибупрофен 10–5–5 мг/кг (A) или парацетамол 15 мг/кг каждые 6 ч, 3–7 сут (B). Курс прекращают, когда проток ≤ 1,5 мм (A). Если через 24 ч после курса ГЗФАП сохраняется — второй курс, препарат можно сменить.' };
+      ru.t += ' Без отёка лёгких фуросемид не рекомендуется (A).'; ru.s = S.ruPda; out.push(ru);
+      out.push(early
+        ? { s: S.usPda, v: 'Выжидательная по умолчанию', t: 'Профилактика и рутинное закрытие до 2 недель не рекомендуются. При гемодинамически значимом ОАП ибупрофен или парацетамол — допустимый вариант. В РКИ NICHD (22–28 нед, JAMA 2025) смертность до 36 нед ПМВ: 4,1% при выжидательной тактике против 9,6% при лечении.' }
+        : { s: S.usPda, v: 'Можно закрывать', tone: c.hs ? 'warn' : '', t: 'Старше 2 недель медикаментозное закрытие гемодинамически значимого ОАП допустимо, ибупрофен предпочтительнее индометацина, не более двух курсов. Если не помогло — транскатетерное закрытие (≥ 700 г) или перевязка.' });
+      var unstable = c.sev === 3, small = c.ga != null && c.ga < 26;
+      out.push({ s: S.caPda, v: early ? (unstable && small ? 'Можно раньше' : 'Консервативно 1–2 нед') : 'Ибупрофен', tone: early && unstable && small ? 'warn' : '', t: (early ? (unstable && small ? 'Нестабильный ребёнок < 26 нед: с консервативной тактикой осторожно, можно рассмотреть более раннюю терапию. ' : 'Стабильным детям — консервативная тактика первые 1–2 недели (условная). ') : '') + 'Препарат выбора — ибупрофен (сильная); после 3–5 сут можно высокие дозы (осторожно < 26 нед). Лечение не начинают по одной клинике без ЭхоКГ. Жидкость не ограничивать < 120 мл/кг/сут; можно повысить ПДКВ; фуросемид допустим (условная).' });
+      out.push({ s: S.eu, v: c.renal ? 'Парацетамол' : 'Любой из трёх', tone: c.renal ? 'warn' : '', t: 'Если выбрано медикаментозное закрытие: индометацин, ибупрофен и парацетамол сопоставимы (A2); парацетамол предпочтительнее при тромбоцитопении или нарушении функции почек (B2).' });
+      return out;
+    },
+    disagree: function (c) {
+      var x = ['Фуросемид: Россия — не применять без отёка лёгких; Канада — можно рассмотреть.'];
+      if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) x.push('Ранняя терапия при < 26 нед: Россия допускает по консилиуму, США не рекомендуют рутинно до 2 недель.');
+      return x;
+    },
+    doses: function (c) {
+      if (c.gate || !c.w) return null; var kg = c.w / 1000;
+      return [
+        { id: 'ibu', n: 'Ибупрофен, стандартно', t: '10 мг/кг = <b>' + fmt(10 * kg) + ' мг</b>, затем 5 мг/кг = <b>' + fmt(5 * kg) + ' мг</b> через 24 и 48 ч', s: 'КР РФ 2026 (A), CPS 2022', bad: c.ci.length },
+        { id: 'ibuh', n: 'Ибупрофен, высокие дозы', t: '15–20 мг/кг = <b>' + fmt(15 * kg) + '–' + fmt(20 * kg) + ' мг</b>, затем 7,5–10 мг/кг = <b>' + fmt(7.5 * kg) + '–' + fmt(10 * kg) + ' мг</b> через 24 и 48 ч', s: 'CPS 2022 (после 3–5 сут; осторожно < 26 нед)', bad: c.ci.length, note: c.ga != null && c.ga < 26 ? '< 26 нед — осторожно' : '' },
+        { id: 'para', n: 'Парацетамол', t: '15 мг/кг = <b>' + fmt(15 * kg) + ' мг</b> каждые 6 ч (60 мг/кг/сут = ' + fmt(60 * kg) + ' мг), 3–7 сут', s: 'КР РФ 2026 (B)' }
+      ];
+    },
+    tact: [['wait', 'Выжидательная'], ['ibu', 'Ибупрофен'], ['para', 'Парацетамол'], ['cause', 'Лечить причину (ЛГ, миокард)'], ['surg', 'Кардиохирург']],
+    judge: function (t, c) {
+      var sup = [], ag = [], early = c.dol != null && c.dol < 14, ru7 = c.dol != null && c.dol <= 7 && !(c.ga != null && c.ga < 26 && c.dol >= 3);
+      if (t === 'wait') {
+        if (c.gate) ag.push('при ЛГ или проток-зависимом ВПС нужно лечить причину');
+        if (early) sup.push(S.usPda.s, S.caPda.s); if (ru7 || c.hs === false) sup.push(S.ruPda.s); sup.push(S.rctPda.s);
+        if (!early && c.hs) ag.push('после 2 недель при ГЗФАП КР РФ рекомендуют симптоматическую терапию');
+      } else if (t === 'ibu' || t === 'para') {
+        if (c.gate) ag.push('абсолютное противопоказание: ЛГ / проток-зависимый ВПС (КР РФ 2026)');
+        if (t === 'ibu' && c.ci.length) ag.push('есть противопоказания к ибупрофену по КР РФ 2026: ' + c.ci.map(function (x) { return PDA.ci.o.filter(function (y) { return y[0] === x; })[0][1].toLowerCase(); }).join(', '));
+        if (c.hs === false) ag.push('критериям ГЗФАП не соответствует');
+        else if (c.hs == null) ag.push('значимость не подтверждена: не хватает ' + c.miss.join(', '));
+        if (ru7 && c.hs !== false) ag.push('КР РФ: после 26 нед в первые 7 суток не назначают');
+        if (c.ga != null && c.ga < 26 && c.dol != null && c.dol >= 3 && c.dol <= 6) ag.push('КР РФ: ранняя терапия при < 26 нед — по решению консилиума');
+        if (early) ag.push('AAP 2025: рутинное закрытие до 2 недель не рекомендовано');
+        sup.push(S.ruPda.s.replace('(2026)', t === 'ibu' ? '(2026, уровень A)' : '(2026, уровень B)'));
+        if (t === 'ibu') sup.push(S.caPda.s); else sup.push(S.eu.s + (c.renal ? ' (B2)' : ' (A2)'));
+        if (!early) sup.push(S.usPda.s);
+      } else if (t === 'cause') sup.push(S.elg.s, S.ruPda.s);
+      else if (t === 'surg') { sup.push(S.ruPda.s, S.caPda.s, S.usPda.s); if (early && !c.gate) ag.push('процедурное закрытие обычно после двух неэффективных курсов или при противопоказаниях'); }
+      return J(sup, ag);
+    },
+    text: function (c, t) {
+      var st = c.st, p = [], kg = c.w ? c.w / 1000 : null;
+      var dir = { lr: 'слева направо', rl: 'справа налево', bi: 'двунаправленный' }[st.dir];
+      p.push('По данным ЭхоКГ: ОАП' + (c.d != null ? ' ' + fmt(c.d, 2) + ' мм' : '') + (dir ? ', сброс ' + dir : '') + (c.lpao != null ? ', ЛП/Ао ' + fmt(c.lpao, 2) : '') + (st.diast ? ', диастолический кровоток в нисходящей аорте ' + { norm: 'сохранён', low: 'снижен', rev: 'реверсивный' }[st.diast] : '') + '.');
+      if (c.hs === true) p.push('Проток гемодинамически значимый' + (c.sev ? ', клинически ' + SEV[c.sev] + ' степень' : '') + '.');
+      else if (c.hs === false && !c.gate) p.push('Критериям гемодинамической значимости не соответствует.');
+      if (t === 'wait') p.push('Выбрана выжидательная тактика: оптимизация респираторной терапии, контроль водного баланса, ЭхоКГ в динамике.');
+      if (t === 'ibu') p.push('Начат курс ибупрофена: 10 мг/кг' + (kg ? ' (' + fmt(10 * kg) + ' мг)' : '') + ', далее 5 мг/кг' + (kg ? ' (' + fmt(5 * kg) + ' мг)' : '') + ' через 24 и 48 ч. Контроль диуреза, креатинина, тромбоцитов, ЭхоКГ после курса.');
+      if (t === 'para') p.push('Начат курс парацетамола 15 мг/кг' + (kg ? ' (' + fmt(15 * kg) + ' мг)' : '') + ' каждые 6 ч, 3–7 сут. Контроль печёночных проб, ЭхоКГ в динамике.');
+      if (t === 'cause') p.push('Медикаментозное закрытие протока не показано, лечение направлено на причину' + (c.gate ? ' (лёгочная гипертензия / проток-зависимый кровоток)' : '') + '.');
+      if (t === 'surg') p.push('Запрошена консультация кардиохирурга для решения вопроса о закрытии протока.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= РДС ================= */
+  var RDS = {
+    id: 'rds', icon: '🫁', name: 'РДС', kp: 'rds',
+    kw: /(?:^|[^а-я])рдс(?![а-я])|респираторн[а-я]* дистресс|синдром[а-я]* дыхательн[а-я]* расстройств|(?:^|[^а-я])сдр(?![а-я])|сурфактант|куросурф|порактант|берактант/,
+    init: function (low) {
+      var st = {};
+      if (/(?:введен[а-я]*|ввели|получил[а-я]*)[^.;]{0,30}(?:сурфактант|куросурф|порактант)|(?:сурфактант|куросурф|порактант)[^.;]{0,30}(?:введен|ввели)/.test(low)) st.surf = '1';
+      if (/(?:втор[а-я]*|повторн[а-я]*)\s+доз[а-я]*\s+(?:сурфактант|куросурф)/.test(low)) st.surf = '2';
+      if (/сильверман[а-я]*\s*[-–:]?\s*([3-9]|10)/.test(low)) st.sil = true;
+      if (/кофеин/.test(low)) st.caf = 'yes';
+      return st;
+    },
+    q: [
+      { k: 'surf', l: 'Сурфактант уже вводили', t: 'one', o: [['0', 'нет'], ['1', '1 доза'], ['2', '2 дозы']] },
+      { k: 'sil', l: 'Сильверман ≥ 3', t: 'flag' },
+      { k: 'xr', l: 'Рентген / УЗИ лёгких — отрицательная динамика', t: 'flag' },
+      { k: 'caf', l: 'Кофеин', t: 'one', o: [['no', 'не получает'], ['yes', 'получает'], ['start', 'назначить']] }
+    ],
+    ctx: function (st, b) {
+      var fio2 = num(b.f.fio2), map = num(b.f.map) || num(b.f.peep), mk = b.f.modeK, ga = b.ga;
+      var kzThr = ga == null ? null : ga < 26 ? 30 : 40;
+      var c = { ga: ga, dol: b.dol, w: b.w, fio2: fio2, map: map, mk: mk, st: st, surfN: +(st.surf || 0) };
+      c.inv = mk === 'inv';
+      c.euInd = fio2 != null && fio2 >= 30 && (mk === 'niv' || mk === 'inv') && (map == null || map >= 6);
+      c.ruInd = (fio2 != null && fio2 >= 30 && (mk === 'niv' || mk === 'inv')) || !!st.sil || !!st.xr;
+      c.kzInd = c.inv || (kzThr != null && fio2 != null && fio2 > kzThr);
+      c.caInd = fio2 != null && fio2 > 50;
+      c.need = c.euInd || c.ruInd || c.kzInd;
+      c.caf = (ga != null && ga < 32) || (b.w != null && b.w < 1500);
+      return c;
+    },
+    status: function (c) {
+      if (c.fio2 == null && !c.st.sil && !c.inv) return ['', 'Укажите FiO₂ и поддержку'];
+      if (c.need) return ['warn', c.surfN ? 'Показана повторная доза' : 'Показан сурфактант'];
+      return ['ok', 'Порог для сурфактанта не достигнут'];
+    },
+    eval: function (c) {
+      var e = [];
+      e.push('Сейчас: ' + (c.mk ? { inv: 'инвазивная ИВЛ', niv: 'CPAP / неинвазивная ИВЛ', o2: 'кислород', none: 'без поддержки' }[c.mk] : 'поддержка не указана') + (c.fio2 != null ? ', FiO₂ ' + c.fio2 + '%' : '') + (c.map != null ? ', давление ' + fmt(c.map) + ' см вод. ст.' : '') + '.');
+      if (c.ga != null) e.push('Порог по КП РК для ' + c.ga + ' нед: FiO₂ > ' + (c.ga < 26 ? '0,30' : '0,40') + '; интубированным — всем.');
+      if (c.caf && c.st.caf !== 'yes') e.push('По сроку/массе показан кофеин (Европа: < 32 нед; КР РФ: < 1500 г и/или < 32 нед).');
+      return e;
+    },
+    world: function (c) {
+      return [
+        { s: kzS('rds', 'Респираторный дистресс-синдром'), v: c.kzInd ? 'Показан' : 'Не достигнут', tone: c.kzInd ? 'warn' : 'ok', q: ['недоношенным новорожденным с гестационным возрастом менее 26 недель, когда FiO2 составляет > 0,30, а для новорожденных со сроком гестации более 26 недель, при FiO2 > 0,40', 'Всем интубированным новорожденным показано проведение заместительной терапии сурфактантом', 'для лечения РДС порактант альфа в начальной дозе 200 мг/кг лучше, чем 100 мг/ кг того же препарата или берактанта', 'должна вводиться вторая, а иногда и третья доза сурфактанта, если сохраняются признаки РДС – такие, как постоянная потребность в кислороде и необходимость проведения механической вентиляции', 'Кофеин цитрат вводится в дозе насыщения 20 мг/кг, далее 5-10 мг/кг/сутки – поддерживающая доза'] },
+        { s: S.ruRds, v: c.ruInd ? 'Показан' : 'Не достигнут', tone: c.ruInd ? 'warn' : 'ok', t: 'На неинвазивной терапии — при FiO₂ ≥ 0,3 и данных за РДС, раннее селективное введение в первые 2 ч; в ОРИТН — при Сильвермане ≥ 3 и/или FiO₂ до 0,3, отрицательной рентген-динамике (A2). ≤ 26 нед — в первые 20 мин всем; ≤ 32 нед, интубированным в родзале — тоже. Повторно — при нарастании до ≥ 3 баллов и/или FiO₂ > 0,3; у < 1000 г на ИВЛ — при MAP до 8 и FiO₂ до 0,3. Методы: INSURE или LISA/MIST (A2). CPAP ≤ 32 нед — не менее 6–8 см вод. ст. Кофеин: 20 мг/кг, далее 5 (до 10) мг/кг/сут; < 1500 г и/или < 32 нед в первые 72 ч (B2).' },
+        { s: S.eu, v: c.euInd ? 'Показан' : 'Не достигнут', tone: c.euInd ? 'warn' : 'ok', t: 'Сурфактант на неинвазивной поддержке при MAP 6 см вод. ст. и FiO₂ ≥ 0,3 или по УЗИ лёгких (сильная). < 28 нед с ранними признаками РДС — рассмотреть селективную профилактику в первый час (сильная). Предпочтительный путь — тонкий катетер (LISA). Порактант 200 мг/кг лучше 100 мг/кг; вторая, иногда третья доза при сохранении РДС. CPAP 6–8 см вод. ст. или синхронизированная NIPPV. Кофеин 20 мг/кг, далее 5–10 мг/кг всем < 32 нед. Антибиотики — обдуманно, отменять, когда сепсис исключён.' },
+        { s: S.caRds, v: c.caInd ? 'Обязателен' : c.need ? 'Ранний сурфактант' : 'Не достигнут', tone: c.caInd || c.need ? 'warn' : 'ok', t: 'Профилактический сурфактант не рекомендован, если CPAP рутинно и антенатальные стероиды > 50% (A). При нарастании РДС — ранний сурфактант (B). FiO₂ > 0,5 — сурфактант обязательно (A). Повторные дозы — только при сохраняющемся среднетяжёлом/тяжёлом РДС (A). На CPAP предпочтительны LISA/MIST (B).' }
+      ];
+    },
+    disagree: function (c) {
+      var x = ['Порог FiO₂ для сурфактанта: КП РК — > 0,30 (< 26 нед) и > 0,40 (≥ 26 нед); Россия и Европа — ≥ 0,30 для всех; Канада — обязательно при > 0,50.'];
+      if (c.fio2 != null && c.fio2 >= 30 && c.fio2 <= 40 && c.ga != null && c.ga >= 26) x.push('Сейчас FiO₂ ' + c.fio2 + '%: по Европе и России — уже показан, по КП РК — ещё нет.');
+      return x;
+    },
+    doses: function (c) {
+      if (!c.w) return null; var kg = c.w / 1000;
+      return [
+        { n: 'Порактант альфа (80 мг/мл)', t: '200 мг/кг = <b>' + fmt(200 * kg, 0) + ' мг = ' + fmt(2.5 * kg, 2) + ' мл</b>', s: 'КП РК №4; Европа 2025' },
+        { n: 'Кофеина цитрат', t: 'насыщение 20 мг/кг = <b>' + fmt(20 * kg) + ' мг</b>; далее 5–10 мг/кг/сут = <b>' + fmt(5 * kg) + '–' + fmt(10 * kg) + ' мг</b>', s: 'КП РК №4; Европа 2025; КР РФ 2025 (5, до 10)' }
+      ];
+    },
+    tact: [['lisa', 'Сурфактант LISA'], ['insure', 'Сурфактант INSURE'], ['mvs', 'ИВЛ + сурфактант'], ['obs', 'Продолжить без сурфактанта'], ['caf', 'Только кофеин']],
+    judge: function (t, c) {
+      var sup = [], ag = [], kz = kzDoc('rds', 'Респираторный дистресс-синдром');
+      if (t === 'lisa' || t === 'insure' || t === 'mvs') {
+        if (!c.need) ag.push('пороги для сурфактанта не достигнуты (FiO₂ ' + (c.fio2 != null ? c.fio2 + '%' : 'не указан') + ')');
+        if (c.need && !c.kzInd && !c.inv) ag.push('по порогу КП РК (FiO₂ > ' + (c.ga != null && c.ga < 26 ? '0,30' : '0,40') + ') ещё не показан');
+        if (c.kzInd) sup.push(kz); if (c.ruInd) sup.push(S.ruRds.s + (t === 'lisa' || t === 'insure' ? ', уровень A' : '')); if (c.euInd) sup.push(S.eu.s); if (c.caInd || c.need) sup.push(S.caRds.s);
+        if (t === 'mvs' && !c.inv && c.need) ag.push('Европа и CPS: на CPAP предпочтителен LISA');
+        if (c.surfN >= 2) ag.push('третья доза — только при сохраняющихся признаках РДС');
+      } else if (t === 'obs') {
+        if (c.kzInd) ag.push('КП РК: по FiO₂ / ИВЛ сурфактант показан');
+        if (c.ruInd) ag.push('КР РФ: показан сурфактант');
+        if (c.euInd) ag.push('Европа: при FiO₂ ≥ 0,3 на неинвазивной поддержке показан сурфактант');
+        if (c.caInd) ag.push('CPS: FiO₂ > 0,5 — сурфактант обязательно');
+        if (!c.need) sup.push(kz, S.ruRds.s, S.eu.s);
+      } else if (t === 'caf') {
+        sup.push(kz, S.eu.s); if (c.caf) sup.push(S.ruRds.s);
+        if (c.need) ag.push('при достигнутом пороге одного кофеина недостаточно — показан сурфактант');
+      }
+      return J(sup, ag, /^(CPS|Европа и CPS)/);
+    },
+    text: function (c, t) {
+      var p = [], kg = c.w ? c.w / 1000 : null, dose = kg ? ' в дозе 200 мг/кг (' + fmt(200 * kg, 0) + ' мг)' : ' в дозе 200 мг/кг';
+      var rep = c.surfN ? ' повторно' : '';
+      if (t === 'lisa') p.push('С учётом течения РДС' + (c.fio2 != null ? ' (FiO₂ ' + c.fio2 + '%' + (c.map != null ? ', давление ' + fmt(c.map) + ' см вод. ст.' : '') + ')' : '') + rep + ' введён порактант альфа' + dose + ' методом LISA на фоне CPAP.');
+      if (t === 'insure') p.push('С учётом течения РДС' + (c.fio2 != null ? ' (FiO₂ ' + c.fio2 + '%)' : '') + rep + ' введён порактант альфа' + dose + ' методом INSURE с последующей экстубацией на CPAP.');
+      if (t === 'mvs') p.push('В связи с прогрессированием дыхательной недостаточности ребёнок интубирован, переведён на ИВЛ,' + rep + ' эндотрахеально введён порактант альфа' + dose + '.');
+      if (t === 'obs') p.push('Показаний к введению сурфактанта на момент осмотра нет' + (c.fio2 != null ? ' (FiO₂ ' + c.fio2 + '%)' : '') + ', продолжена неинвазивная респираторная терапия.');
+      if (t === 'caf' || c.st.caf === 'start') p.push('Назначен кофеина цитрат: доза насыщения 20 мг/кг' + (kg ? ' (' + fmt(20 * kg) + ' мг)' : '') + ', далее 5 мг/кг/сут' + (kg ? ' (' + fmt(5 * kg) + ' мг)' : '') + '.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= РАННИЙ СЕПСИС ================= */
+  var SEP = {
+    id: 'sep', icon: '🦠', name: 'Ранний сепсис / инфекция', kp: 'sepsis',
+    kw: /сепсис|(?:^|[^а-я])вуи(?![а-я])|внутриутробн[а-я]* инфекц|ранн[а-я]* неонатальн[а-я]* (?:сепсис|инфекц)|хориоамнионит|(?:^|[^а-я])рнс(?![а-я])/,
+    init: function (low) {
+      var st = { rf: {} };
+      if (/посев[а-я]*[^.;]{0,25}(?:отрицат|стерил|роста нет|без роста)/.test(low)) st.cult = 'neg';
+      else if (/посев[а-я]*[^.;]{0,25}(?:положит|выдел|рост )/.test(low)) st.cult = 'pos';
+      var h = grab(low, /(\d{1,3})\s*(?:ч|час[а-я]*)\s*(?:от начала|антибиотикотерап|абт|антибактериальн)/); if (h) st.h = h;
+      if (/посев[а-я]* (?:крови )?(?:взят|отправл)[а-я]*[^.;]{0,25}до (?:первой дозы|начала|антибиот)/.test(low)) st.before = 'yes';
+      if (/хориоамнионит|лихорадк[а-я]* у матери|лихорадк[а-я]* матери/.test(low)) st.rf.ch = true;
+      if (/безводн[а-я]* (?:промежут|период)[^.;]{0,15}(?:более|>)?\s*(?:18|19|2\d|\d{2,})/.test(low)) st.rf.rom = true;
+      return st;
+    },
+    q: [
+      { k: 'h', l: 'Часов от начала АБТ', t: 'num', half: 1 }, { k: 'crpv', l: 'СРБ, мг/л', t: 'txt', half: 1 },
+      { k: 'before', l: 'Посев крови до первой дозы', t: 'one', o: [['yes', 'взят'], ['no', 'не взят']] },
+      { k: 'cult', l: 'Посев крови', t: 'one', o: [['wait', 'ждём'], ['neg', 'отрицательный'], ['pos', 'положительный']] },
+      { k: 'crp', l: 'СРБ и динамика', t: 'one', o: [['ok', 'не растёт, низкий'], ['up', 'повышен / растёт']] },
+      { k: 'clin', l: 'Состояние', t: 'one', o: [['ok', 'признаков инфекции нет'], ['bad', 'есть признаки инфекции']] },
+      { k: 'strong', l: 'Сильное исходное подозрение на сепсис', t: 'flag' },
+      { k: 'rf', l: 'Факторы риска', t: 'multi', o: [['ch', 'хориоамнионит / лихорадка матери'], ['rom', 'безводный > 18 ч'], ['gbs', 'СГВ у матери'], ['pt', 'преждевременные роды / ПРПО']] }
+    ],
+    ctx: function (st, b) {
+      var h = num(st.h), c = { ga: b.ga, dol: b.dol, w: b.w, h: h, st: st };
+      c.canStop = h != null && h >= 36 && st.cult === 'neg' && !st.strong && st.crp === 'ok' && st.clin === 'ok';
+      c.need7 = st.cult === 'pos' || (st.cult === 'neg' && !!st.strong);
+      c.preterm = b.ga != null && b.ga < 35;
+      return c;
+    },
+    status: function (c) {
+      if (c.st.cult === 'pos') return ['bad', 'Посев положительный'];
+      if (c.canStop) return ['ok', 'Можно отменять АБТ'];
+      if (c.need7) return ['warn', 'Курс 7 дней'];
+      if (c.h != null && c.h < 36) return ['', 'Оценка через ' + Math.max(0, Math.ceil(36 - c.h)) + ' ч'];
+      return ['', 'Эмпирическая терапия'];
+    },
+    eval: function (c) {
+      var e = [];
+      if (c.st.before === 'no') e.push('Посев крови не взят до первой дозы — это отклонение от КП РК (обязательно).');
+      if (c.h != null) e.push('Прошло ' + c.h + ' ч от начала АБТ. Решение об отмене — через 36 ч (КП РК, NICE) / 36–48 ч инкубации посева (AAP).');
+      if (c.canStop) e.push('Все условия отмены через 36 ч соблюдены: посев отрицательный, подозрение не сильное, состояние без признаков инфекции, СРБ успокаивает.');
+      return e;
+    },
+    world: function (c) {
+      return [
+        { s: kzS('sepsis', 'Бактериальный сепсис новорожденного'), v: c.canStop ? 'Рассмотреть отмену' : c.need7 ? '7 дней' : 'Эмпирически', tone: c.need7 ? 'warn' : c.canStop ? 'ok' : '', q: ['При подозрении на развитие раннего неонатального сепсиса в качестве антибиотикотерапии первого выбора рекомендуется внутривенное введение бензилпенициллина/ампициллина с гентамицином', 'Бензилпенициллин назначается в дозе 25 мг/кг через каждые 12 часов.', 'Гентамицин вводится в начальной дозе 5 мг/кг', 'вторая доза гентамицина вводится через 36 часов после первой дозы', 'проводить контроль уровня С-реактивного белка через 18–24 часа после начала антибактериальной терапии', 'через 36/48 часов от начала антибактериальной терапии следует рассмотреть возможность прекращения введения антибиотиков, если: – посев крови отрицательный; – клиническое состояние ребенка удовлетворительное', 'лечение антибиотиками проводится в течение 7 дней'] },
+        { s: S.ukSep, v: c.canStop ? 'Отменить на 36 ч' : c.need7 ? '7 дней' : 'Эмпирически', tone: c.need7 ? 'warn' : c.canStop ? 'ok' : '', t: 'Первый выбор — бензилпенициллин 25 мг/кг каждые 12 ч (каждые 8 ч, если очень болен) + гентамицин 5 мг/кг, вторая доза обычно через 36 ч. Отменить на 36 ч, если посев отрицательный, исходное подозрение не сильное, состояние успокаивает и уровни и динамика СРБ успокаивают. 7 дней — при положительном посеве или сильном подозрении. С 2026: при ≥ 35 нед можно перейти на приём внутрь после 36 ч.' },
+        { s: S.usSep, v: 'Отмена к 36–48 ч', tone: c.need7 ? '' : 'ok', t: 'Ампициллин + гентамицин — наиболее подходящая эмпирическая схема; у недоношенных высокого риска — посев крови и эмпирические антибиотики. Отменять, если посев стерилен к 36–48 ч инкубации и нет локального очага.' },
+        { s: S.ruSep, v: 'Ампициллин + аминогликозид', t: 'Стартовая схема — ампициллин + аминогликозид (гентамицин, амикацин). Посев — по возможности до АБТ, объём не более 4% ОЦК, минимум 1 мл. Лабораторный контроль минимум трижды: при диагнозе, через 72 ч от начала АБТ и после курса (A1). Дозы гентамицина зависят от срока гестации (см. ниже).' }
+      ];
+    },
+    disagree: function () {
+      return ['Гентамицин: в тексте КП РК (как у NICE) — 5 мг/кг, вторая доза через 36 ч; в таблице КП РК и в КР РФ — по сроку гестации (4 мг/кг каждые 24 ч при ≥ 35 нед). «Антидефект» отмечает это как противоречие внутри протокола РК.', 'В том же КП РК есть и другая формулировка: при отрицательном посеве «прекратить лечение ампициллином и гентамицином после 3-5 дней терапии» — она расходится с правилом 36/48 ч.'];
+    },
+    doses: function (c) {
+      if (!c.w) return null; var kg = c.w / 1000, d = c.dol, ga = c.ga, out = [];
+      out.push({ n: 'Бензилпенициллин', t: '25 мг/кг = <b>' + fmt(25 * kg) + ' мг</b> каждые 12 ч (каждые 8 ч, если очень болен)', s: 'КП РК №185; NICE NG195' });
+      var amp = c.w < 2000 ? (d != null && d > 7 ? '50 мг/кг каждые 8 ч' : '25–50 мг/кг каждые 12 ч') : (d != null && d > 7 ? '50 мг/кг каждые 6 ч' : '50 мг/кг каждые 8 ч');
+      var ampMg = c.w < 2000 && !(d != null && d > 7) ? fmt(25 * kg) + '–' + fmt(50 * kg) : fmt(50 * kg);
+      out.push({ n: 'Ампициллин', t: amp + ' = <b>' + ampMg + ' мг</b> на введение', s: 'КР РФ 2025 (масса ' + (c.w < 2000 ? '< 2000' : '> 2000') + ' г, ' + (d != null && d > 7 ? '8–28' : '0–7') + ' дней)' });
+      out.push({ n: 'Гентамицин (КП РК, текст; NICE)', t: '5 мг/кг = <b>' + fmt(5 * kg) + ' мг</b>, вторая доза через 36 ч', s: 'КП РК №185; NICE NG195' });
+      if (ga != null) {
+        var g = ga < 30 ? (d != null && d > 14 ? [5, 36] : [5, 48]) : ga < 35 ? (d != null && d > 10 ? [5, 24] : [5, 36]) : (d != null && d > 7 ? [5, 24] : [4, 24]);
+        out.push({ n: 'Гентамицин (КР РФ, по сроку)', t: g[0] + ' мг/кг = <b>' + fmt(g[0] * kg) + ' мг</b> каждые ' + g[1] + ' ч', s: 'КР РФ 2025 (ГВ ' + ga + ' нед, ' + (d != null ? d + '-е сутки' : 'сутки не указаны') + ')' });
+      }
+      return out;
+    },
+    tact: [['start', 'Начать эмпирическую АБТ'], ['cont', 'Продолжить'], ['stop', 'Отменить АБТ'], ['c7', 'Курс 7 дней']],
+    judge: function (t, c) {
+      var sup = [], ag = [], st = c.st, kz = kzDoc('sepsis', 'Бактериальный сепсис новорожденного');
+      if (t === 'start') { sup.push(kz, S.ukSep.s, S.usSep.s, S.ruSep.s); if (st.before === 'no') ag.push('посев крови не взят до первой дозы (КП РК — обязательно)'); }
+      if (t === 'stop') {
+        if (st.cult === 'pos') ag.push('посев положительный — курс 7 дней (КП РК, NICE)');
+        else if (st.strong) ag.push('сильное исходное подозрение — 7 дней (КП РК, NICE)');
+        if (c.h != null && c.h < 36) ag.push('до 36 ч от начала АБТ (КП РК, NICE — решение через 36 ч)');
+        if (st.cult !== 'neg' && st.cult !== 'pos') ag.push('результат посева ещё не известен');
+        if (st.crp === 'up') ag.push('СРБ повышен или растёт');
+        if (st.clin === 'bad') ag.push('есть клинические признаки инфекции');
+        if (c.canStop) sup.push(kz, S.ukSep.s, S.usSep.s);
+      }
+      if (t === 'cont') {
+        sup.push(kz);
+        if (c.canStop) ag.push('условия отмены через 36 ч соблюдены (КП РК)', 'NICE NG195 и AAP 2018: при стерильном посеве к 36–48 ч антибиотики отменяют');
+      }
+      if (t === 'c7') { if (c.need7) sup.push(kz, S.ukSep.s); else ag.push('7 дней — при положительном посеве или сильном подозрении (КП РК, NICE)'); }
+      return J(sup, ag, /^NICE/);
+    },
+    text: function (c, t) {
+      var st = c.st, p = [], kg = c.w ? c.w / 1000 : null;
+      var desc = [];
+      if (st.rf) { var r = Object.keys(st.rf).filter(function (x) { return st.rf[x]; }).map(function (x) { return { ch: 'хориоамнионит / лихорадка у матери', rom: 'безводный промежуток > 18 ч', gbs: 'СГВ у матери', pt: 'преждевременные роды / ПРПО' }[x]; }); if (r.length) desc.push('факторы риска: ' + r.join(', ')); }
+      if (st.cult) desc.push('посев крови ' + { wait: '— результат ожидается', neg: 'отрицательный', pos: 'положительный' }[st.cult]);
+      if (st.crpv) desc.push('СРБ ' + st.crpv + ' мг/л');
+      if (c.h != null) desc.push(c.h + ' ч от начала антибактериальной терапии');
+      if (desc.length) p.push(cap(desc.join(', ')) + '.');
+      if (t === 'start') p.push('Начата эмпирическая антибактериальная терапия: бензилпенициллин 25 мг/кг' + (kg ? ' (' + fmt(25 * kg) + ' мг)' : '') + ' каждые 12 ч + гентамицин 5 мг/кг' + (kg ? ' (' + fmt(5 * kg) + ' мг)' : '') + ', вторая доза через 36 ч.' + (st.before === 'yes' ? ' Посев крови взят до первой дозы.' : '') + ' Контроль СРБ через 18–24 ч.');
+      if (t === 'cont') p.push('Антибактериальная терапия продолжена.');
+      if (t === 'stop') p.push('Антибактериальная терапия отменена: посев крови отрицательный, клинических признаков инфекции нет, уровень и динамика СРБ без признаков воспаления.');
+      if (t === 'c7') p.push('Курс антибактериальной терапии — 7 дней' + (st.cult === 'pos' ? ' (положительный посев крови)' : ' (высокий риск при отрицательном посеве)') + '.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= НЭК ================= */
+  var NEC = {
+    id: 'nec', icon: '🩺', name: 'НЭК', kp: 'nek',
+    kw: /(?:^|[^а-я])нэк(?![а-я])|некротиз[а-я]* энтероколит|пневматоз/,
+    init: function (low) {
+      var st = { chk: {} }, m = /(?:нэк|стади[а-я]*|белл[а-я]*)\s*(?:по беллу\s*)?(iii|ii|i|3|2|1)\s*([аaбb])?/.exec(low);
+      if (m) { var n = { i: '1', ii: '2', iii: '3' }[m[1]] || m[1]; st.bell = n === '1' ? '1' : n + (m[2] && /[бb]/.test(m[2]) ? 'b' : 'a'); }
+      if (/свободн[а-я]* газ|пневмоперитонеум|перфорац/.test(low)) st.gas = true;
+      if (/(?:кормлени[а-я]*|энтеральн[а-я]*)\s+(?:отмен|прекращ|не провод)|голод|энтерально не/.test(low)) st.chk.npo = true;
+      if (/зонд/.test(low)) st.chk.ng = true;
+      if (/метронидазол/.test(low)) st.chk.metro = true;
+      if (/хирург/.test(low)) st.chk.surg = true;
+      if (/(?:полн[а-я]* )?парентеральн[а-я]* питани|(?:^|[^а-я])пп(?![а-я])/.test(low)) st.chk.pn = true;
+      return st;
+    },
+    q: [
+      { k: 'bell', l: 'Стадия по Беллу', t: 'one', o: [['1', 'I'], ['2a', 'IIA'], ['2b', 'IIB'], ['3a', 'IIIA'], ['3b', 'IIIB']] },
+      { k: 'gas', l: '⚠ Свободный газ / перфорация', t: 'flag', bad: 1 },
+      { k: 'chk', l: 'Что сделано (КП РК)', t: 'multi', o: [['npo', 'кормление прекращено'], ['ng', 'зонд на декомпрессию'], ['pn', 'полное ПП'], ['cath', 'пупочные катетеры удалены'], ['metro', 'метронидазол в схеме'], ['surg', 'осмотр хирурга'], ['xr', 'рентген через 48 ч']] }
+    ],
+    REQ: [['npo', 'прекратить энтеральное кормление'], ['ng', 'назогастральный зонд для декомпрессии'], ['pn', 'парентеральное питание с первого дня'], ['cath', 'удалить пупочные катетеры'], ['metro', 'метронидазол'], ['surg', 'осмотр детского хирурга'], ['xr', 'рентгенография через 48 ч']],
+    ctx: function (st, b) { var miss = NEC.REQ.filter(function (r) { return !st.chk[r[0]]; }); return { ga: b.ga, dol: b.dol, w: b.w, st: st, miss: miss, surgical: !!st.gas || /^3b/.test(st.bell || '') }; },
+    status: function (c) { return c.surgical ? ['bad', 'Хирургическая ситуация'] : c.st.bell ? ['warn', 'НЭК ' + { '1': 'I', '2a': 'IIA', '2b': 'IIB', '3a': 'IIIA', '3b': 'IIIB' }[c.st.bell]] : ['warn', 'Подозрение на НЭК']; },
+    eval: function (c) { var e = []; if (c.miss.length) e.push('По КП РК ещё не отмечено: ' + c.miss.map(function (r) { return r[1]; }).join(', ') + '.'); else e.push('Все обязательные пункты КП РК отмечены.'); if (c.st.bell) e.push('Длительность АБТ по КП РК: НЭК I — 5 дней, НЭК II — не менее 10 дней.'); return e; },
+    world: function (c) {
+      return [
+        { s: kzS('nek', 'Некротизирующий энтероколит новорожденных'), v: c.miss.length ? 'Не всё отмечено' : 'По протоколу', tone: c.miss.length ? 'warn' : 'ok', q: ['При подозрении на НЭК немедленно: прекратить энтеральное кормление; установить назогастральный зонд (F6-10) для обеспечения свободного оттока содержимого желудка – декомпрессия кишечника;', 'удалить пупочный венозный и артериальный катетер;', 'парентеральное питание следует начинать с первого дня заболевания согласно протоколу парентерального питания;', 'с целью усиления антианаэробного звена в терапию должен быть введен метронидазол;', 'антибактериальные препараты применяют до устойчивой стабилизации клинико-лабораторного статуса и восстановления функций ЖКТ, НЭК I в течение 5 дней, НЭК II не менее 10 дней;', 'обзорная рентгенография грудной и брюшной полостей через 48 часов после установленного диагноза, затем 1 раз в неделю', 'осмотр детского хирурга для своевременного определения показаний к переводу в детское хирургическое отделение'] },
+        { s: S.msdNec, v: 'Поддерживающее', t: 'Лечение в основном поддерживающее: назогастральная аспирация, парентеральные жидкости и питание, антибиотики, изоляция при инфекции, иногда хирургическое вмешательство. Национальных клинических рекомендаций США или Европы по лечению НЭК, сопоставимых с протоколом РК, я не нашёл; российские КР по НЭК в открытом доступе тоже не нашёл.' }
+      ];
+    },
+    disagree: function () { return []; },
+    doses: function (c) { if (!c.w) return null; var kg = c.w / 1000; return [{ n: 'Метронидазол', t: '7,5 мг/кг = <b>' + fmt(7.5 * kg) + ' мг</b> в/в 2 раза в сутки', s: 'КП РК №185 (таблица препаратов)' }, { n: 'Фуросемид при диурезе < 1 мл/кг/ч', t: '1 мг/кг = <b>' + fmt(kg, 2) + ' мг</b>', s: 'КП РК №185' }]; },
+    tact: [['cons', 'Консервативное лечение'], ['surg', 'Хирург / перевод']],
+    judge: function (t, c) {
+      var sup = [kzDoc('nek', 'Некротизирующий энтероколит новорожденных')], ag = [];
+      if (t === 'cons') { c.miss.forEach(function (r) { ag.push('КП РК: ' + r[1] + ' — не отмечено'); }); if (c.surgical) ag.push('свободный газ / перфорация — хирургическая ситуация'); }
+      if (t === 'surg') { /* хирург всегда допустим */ }
+      return J(sup, ag);
+    },
+    text: function (c, t) {
+      var st = c.st, p = [], kg = c.w ? c.w / 1000 : null;
+      p.push((st.bell ? 'Некротизирующий энтероколит, стадия ' + { '1': 'I', '2a': 'IIA', '2b': 'IIB', '3a': 'IIIA', '3b': 'IIIB' }[st.bell] + ' по Беллу' : 'Подозрение на некротизирующий энтероколит') + (st.gas ? ', свободный газ в брюшной полости' : '') + '.');
+      var done = NEC.REQ.filter(function (r) { return st.chk[r[0]]; }).map(function (r) { return { npo: 'энтеральное кормление прекращено', ng: 'установлен назогастральный зонд для декомпрессии', pn: 'проводится полное парентеральное питание', cath: 'пупочные катетеры удалены', metro: 'в схему АБТ введён метронидазол' + (kg ? ' 7,5 мг/кг (' + fmt(7.5 * kg) + ' мг) 2 раза в сутки' : ''), surg: 'осмотрен детским хирургом', xr: 'контрольная рентгенография через 48 ч' }[r[0]]; });
+      if (done.length) p.push(cap(done.join('; ')) + '.');
+      if (t === 'cons') p.push('Продолжено консервативное лечение по протоколу.');
+      if (t === 'surg') p.push('Вызван детский хирург для решения вопроса о хирургическом лечении / переводе.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= ГИПОГЛИКЕМИЯ / ДЕТИ ОТ МАТЕРЕЙ С ДИАБЕТОМ ================= */
+  var HYP = {
+    id: 'hyp', icon: '🩸', name: 'Гипогликемия · мать с диабетом', kp: 'diabeticheskaya-fetopatiya',
+    kw: /гипоглик|диабет|(?:^|[^а-я])гсд(?![а-я])|фетопат|(?:^|[^а-я])сд у матери/,
+    init: function (low) {
+      var st = {}, g = grab(low, /(?:глюкоз[а-я]*|сахар[а-я]*|(?:^|[^а-я])угк|(?:^|[^а-я])гк)(?:\s+крови)?\s*[-–:]?\s*(\d{1,2}(?:[.,]\d{1,2})?)/);
+      if (g) st.glu = g.replace('.', ',');
+      if (/гсд|гестационн[а-я]* (?:сахарн[а-я]* )?диабет/.test(low)) st.md = 'gsd'; else if (/сд\s*[12]|сахарн[а-я]* диабет|инсулинозависим/.test(low)) st.md = 'sd';
+      if (/судорог|апноэ|вял/.test(low)) st.sym = true;
+      return st;
+    },
+    autodetect: function (low) { var g = num(grab(low, /(?:глюкоз[а-я]*|сахар[а-я]*|(?:^|[^а-я])угк)(?:\s+крови)?\s*[-–:]?\s*(\d{1,2}(?:[.,]\d{1,2})?)/)); return g != null && g < 2.6; },
+    q: [
+      { k: 'glu', l: 'Глюкоза, ммоль/л', t: 'num', half: 1 }, { k: 'hrs', l: 'Часов жизни', t: 'num', half: 1 },
+      { k: 'md', l: 'Мать', t: 'one', o: [['sd', 'СД 1/2 типа'], ['gsd', 'ГСД'], ['no', 'без диабета']] },
+      { k: 'sym', l: 'Есть симптомы (судороги, апноэ, вялость, плохо сосёт)', t: 'flag' },
+      { k: 'noeff', l: 'Нет эффекта от глюкозы 6 ч', t: 'flag' },
+      { k: 'pers', l: '> 2 эпизодов < 2,0 за 72 ч', t: 'flag' }
+    ],
+    ctx: function (st, b) {
+      var g = num(st.glu), term = b.ga == null ? null : b.ga >= 37, okThr = term === false ? 2.6 : 2.0, c = { ga: b.ga, w: b.w, g: g, term: term, st: st, hrs: num(st.hrs) };
+      c.kzIV = g != null && g >= 1.5 && g < okThr; c.kzTransfer = (g != null && g < 1.5) || !!st.sym; c.kzOk = g != null && g >= okThr && !st.sym;
+      c.bapmIV = (g != null && g < 1.0) || (g != null && g < 2.5 && !!st.sym); c.bapmGel = !c.bapmIV && g != null && g >= 1.0 && g < 2.0; c.bapmRef = c.bapmIV || !!st.pers;
+      var mgdl = g != null ? g * 18 : null; c.mgdl = mgdl;
+      c.aapIV = mgdl != null && ((st.sym && mgdl < 40) || (c.hrs != null && c.hrs <= 4 && mgdl < 25) || (c.hrs != null && c.hrs > 4 && c.hrs <= 24 && mgdl < 35));
+      return c;
+    },
+    status: function (c) {
+      if (c.g == null) return ['', 'Укажите глюкозу'];
+      if (c.kzTransfer) return ['bad', 'Инфузия 10% глюкозы, ОПН/ПИТ'];
+      if (c.kzIV) return ['warn', 'Болюс 10% глюкозы (КП РК)'];
+      return ['ok', 'Продолжать кормление'];
+    },
+    eval: function (c) {
+      var e = [];
+      if (c.g != null) e.push('Глюкоза ' + fmt(c.g, 1) + ' ммоль/л (≈ ' + fmt(c.mgdl, 0) + ' мг/дл)' + (c.term == null ? '; срок гестации не указан — пороги для доношенного' : c.term ? ', доношенный' : ', недоношенный') + '.');
+      e.push('КП РК: доношенный ≥ 2,0 / недоношенный ≥ 2,6 — кормить каждые 2–3 ч; доношенный 1,5–1,9 / недоношенный 1,5–2,5 — болюс 10% глюкозы и инфузия; < 1,5 или симптомы — ОПН/ПИТ.');
+      if (c.st.md && c.st.md !== 'no') e.push('Мать с диабетом: глюкоза через 30–60 мин после рождения, первые 3 суток — каждые 3–4 ч (КП РК).');
+      return e;
+    },
+    world: function (c) {
+      return [
+        { s: kzS('diabeticheskaya-fetopatiya', 'Диабетическая фетопатия'), v: c.kzTransfer ? 'ОПН/ПИТ, инфузия' : c.kzIV ? 'Болюс + инфузия' : c.kzOk ? 'Кормить' : '—', tone: c.kzTransfer ? 'bad' : c.kzIV ? 'warn' : 'ok', q: ['Измерьте уровень глюкозы в крови (УГК) через 30-60 минут после рождения.', 'Немедленно внутривенно болюсно ввести 2 мл', 'Новорожденного с симптомом гипогликемии или с уровнем < 1,5 ммоль/л необходимо перевести в отделение патологии новорожденных/ПИТ для инфузии 10% глюкозы', 'глюкагон в дозе 0,1 мг/кг', 'гидрокортизон 5-10 мг/кг/сут'], t: 'Болюс в тексте протокола — «2 мл» 10% раствора глюкозы, без указания «/кг»; в AAP — 2 мл/кг, в BAPM — 2,5 мл/кг.' },
+        { s: S.ukHypo, v: c.bapmIV ? 'В/в глюкоза' : c.bapmGel ? 'Гель + кормление' : 'Кормить', tone: c.bapmIV ? 'bad' : c.bapmGel ? 'warn' : 'ok', t: 'Для доношенных до 72 ч. Срочно к неонатологу и обследование: < 1,0 в любой момент, < 2,5 при клинических признаках, > 2 измерений < 2,0. Гель 40% глюкозы 200 мг/кг, до двух доз с интервалом 30 мин на эпизод, максимум 6 доз за 48 ч. В/в: 10% глюкоза 2,5 мл/кг болюсом, затем 60 мл/кг/сут. Цель > 2,5 ммоль/л (3,0 при гиперинсулинизме; после 72 ч > 3,5).' },
+        { s: S.usHypo, v: c.aapIV ? 'В/в глюкоза' : 'Кормить, контроль', tone: c.aapIV ? 'bad' : 'ok', t: 'Поздние недоношенные и доношенные из группы риска (в т. ч. от матерей с диабетом). Бессимптомным в/в глюкоза, только если < 25 мг/дл (≈ 1,4 ммоль/л) в 0–4 ч или < 35 мг/дл (≈ 1,9) в 4–24 ч после попытки кормления; с симптомами и < 40 мг/дл (≈ 2,2) — сразу в/в. Болюс 200 мг/кг (2 мл/кг 10%) и/или инфузия 10% 80–100 мл/кг/сут; цель перед кормлением > 45 мг/дл (≈ 2,5).' }
+      ];
+    },
+    disagree: function (c) {
+      var x = ['Гель глюкозы: в BAPM — первая линия при 1,0–1,9 без симптомов; в КП РК гель не предусмотрен, при 1,5–1,9 у доношенного — в/в болюс.', 'Объём болюса: КП РК — «2 мл»; AAP — 2 мл/кг; BAPM — 2,5 мл/кг.'];
+      return x;
+    },
+    doses: function (c) {
+      if (!c.w) return null; var kg = c.w / 1000;
+      return [
+        { n: 'Болюс 10% глюкозы', t: '2 мл/кг = <b>' + fmt(2 * kg) + ' мл</b> (AAP) · 2,5 мл/кг = <b>' + fmt(2.5 * kg) + ' мл</b> (BAPM)', s: 'AAP 2011; BAPM 2024' },
+        { n: 'Инфузия 10% глюкозы', t: '60 мл/кг/сут = <b>' + fmt(60 * kg / 24, 2) + ' мл/ч</b> (≈ 4,2 мг/кг/мин, BAPM) · 80–100 мл/кг/сут = <b>' + fmt(80 * kg / 24, 2) + '–' + fmt(100 * kg / 24, 2) + ' мл/ч</b> (≈ 5,6–6,9 мг/кг/мин, AAP)', s: 'BAPM 2024; AAP 2011' },
+        { n: 'Гель 40% глюкозы', t: '200 мг/кг = 0,5 мл/кг = <b>' + fmt(0.5 * kg, 2) + ' мл</b> за щеку, до 2 доз через 30 мин', s: 'BAPM 2024' },
+        { n: 'Глюкагон', t: '0,1 мг/кг = <b>' + fmt(0.1 * kg, 2) + ' мг</b> в/м при отсутствии эффекта 6 ч', s: 'КП РК №27' }
+      ];
+    },
+    tact: [['feed', 'Кормить, контроль'], ['gel', 'Гель + кормление'], ['iv', 'Болюс + инфузия 10%'], ['gluc', 'Глюкагон'], ['ref', 'Обследование, эндокринолог']],
+    judge: function (t, c) {
+      var sup = [], ag = [], kz = kzDoc('diabeticheskaya-fetopatiya', 'Диабетическая фетопатия');
+      if (t === 'feed') { if (c.kzIV || c.kzTransfer) ag.push('КП РК: при этом уровне — в/в болюс 10% глюкозы и инфузия'); if (c.aapIV) ag.push('AAP 2011: показана в/в глюкоза'); if (c.bapmIV) ag.push('BAPM 2024: показана в/в глюкоза'); if (c.kzOk) sup.push(kz); if (!c.aapIV) sup.push(S.usHypo.s); }
+      if (t === 'gel') { if (c.kzIV || c.kzTransfer) ag.push('КП РК: в/в болюс 10% глюкозы; гель в протоколе РК не предусмотрен'); if (c.bapmIV) ag.push('BAPM 2024: при этом уровне/симптомах нужна в/в глюкоза'); if (c.bapmGel) sup.push(S.ukHypo.s); }
+      if (t === 'iv') { if (c.kzIV || c.kzTransfer) sup.push(kz); if (c.bapmIV) sup.push(S.ukHypo.s); if (c.aapIV) sup.push(S.usHypo.s); if (!sup.length) ag.push('по уровню глюкозы показаний к в/в болюсу нет'); }
+      if (t === 'gluc') { if (c.st.noeff) sup.push(kz); else ag.push('КП РК: глюкагон — при отсутствии эффекта от глюкозы в течение 6 ч'); }
+      if (t === 'ref') { sup.push(S.ukHypo.s); if (!c.bapmRef) ag.push('BAPM: обследование при < 1,0, < 2,5 с симптомами или > 2 эпизодах < 2,0'); }
+      return J(sup, ag, /^(AAP|BAPM)/);
+    },
+    text: function (c, t) {
+      var st = c.st, p = [], kg = c.w ? c.w / 1000 : null;
+      p.push((st.md === 'sd' ? 'Ребёнок от матери с сахарным диабетом. ' : st.md === 'gsd' ? 'Ребёнок от матери с гестационным сахарным диабетом. ' : '') + (c.g != null ? 'Уровень глюкозы крови ' + fmt(c.g, 1) + ' ммоль/л' + (c.hrs != null ? ' в ' + c.hrs + ' ч жизни' : '') + (st.sym ? ', с клиническими симптомами' : ', без клинических симптомов') + '.' : ''));
+      if (t === 'feed') p.push('Продолжено кормление каждые 2–3 ч, контроль глюкозы перед кормлением.');
+      if (t === 'gel') p.push('Введён гель 40% глюкозы 200 мг/кг' + (kg ? ' (' + fmt(0.5 * kg, 2) + ' мл)' : '') + ' за щеку, кормление, контроль глюкозы через 30 мин.');
+      if (t === 'iv') p.push('Введён болюс 10% глюкозы 2 мл/кг' + (kg ? ' (' + fmt(2 * kg) + ' мл)' : '') + ' в/в, начата инфузия 10% глюкозы, контроль глюкозы через 30 мин.');
+      if (t === 'gluc') p.push('В связи с отсутствием эффекта от введения глюкозы в течение 6 ч введён глюкагон 0,1 мг/кг' + (kg ? ' (' + fmt(0.1 * kg, 2) + ' мг)' : '') + ' в/м.');
+      if (t === 'ref') p.push('Персистирующая гипогликемия: запланировано обследование (инсулин, кортизол, кетоны в момент гипогликемии), консультация эндокринолога.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= ПРОТОК-ЗАВИСИМЫЕ ВПС ================= */
+  var CHD = {
+    id: 'chd', icon: '🫀', name: 'ВПС · проток-зависимый', kp: null, kzNone: 'отдельный протокол МЗ РК по критическим ВПС у новорождённых в базе приложения отсутствует',
+    kw: /(?:^|[^а-я])впс(?![а-я])|порок[а-я]* сердц|коарктац|транспозиц|(?:^|[^а-я])тма(?![а-я])|гипоплаз[а-я]* левых|атрези[а-я]* легочн|тетрад[а-я]* фалло|проток[а-я]*[- ]?зависим|дуктус[- ]?зависим|алпростадил|вазапростан|простагланд|(?:^|[^а-я])pge|(?:^|[^а-я])пге/,
+    init: function (low) {
+      var st = { sig: {} }, pre = grab(low, /(?:пред?[- ]?дуктальн[а-я]*|(?:на )?прав[а-я]* рук[а-я]*)\s*[-–:]?\s*(\d{2,3})/), post = grab(low, /(?:постд?[- ]?дуктальн[а-я]*|(?:на )?ног[а-я]*)\s*[-–:]?\s*(\d{2,3})/);
+      if (pre) st.pre = pre; if (post) st.post = post;
+      if (/проток[а-я]*[- ]?зависим|дуктус[- ]?зависим|коарктац|транспозиц|гипоплаз[а-я]* левых|атрези[а-я]* легочн|перерыв дуги/.test(low)) st.susp = true;
+      if (/алпростадил|вазапростан|простагланд|(?:^|[^а-я])pge/.test(low)) st.pge = 'yes';
+      if (/пульс[а-я]* на бедр[а-я]*\s*(?:слаб|ослаб|не)/.test(low)) st.sig.puls = true;
+      return st;
+    },
+    q: [
+      { k: 'pre', l: 'SpO₂ правая рука, %', t: 'num', half: 1 }, { k: 'post', l: 'SpO₂ нога, %', t: 'num', half: 1 },
+      { k: 'susp', l: 'Подозрение на проток-зависимый ВПС', t: 'flag', bad: 1 },
+      { k: 'sig', l: 'Признаки', t: 'multi', o: [['puls', 'слабый пульс на бёдрах'], ['shock', 'шок / ацидоз'], ['cyan', 'цианоз не уходит на O₂'], ['murm', 'шум']] },
+      { k: 'pge', l: 'Простагландин E1', t: 'one', o: [['no', 'не начат'], ['yes', 'идёт']] },
+      { k: 'apnea', l: 'Апноэ на PGE1', t: 'flag' }
+    ],
+    ctx: function (st, b) {
+      var pre = num(st.pre), post = num(st.post), c = { w: b.w, st: st, pre: pre, post: post };
+      if (pre != null && post != null) { var lo = Math.min(pre, post), df = Math.abs(pre - post); c.scr = lo <= 89 ? 'fail' : (lo >= 95 && df <= 3) ? 'pass' : 'retest'; c.diff = df; }
+      c.susp = !!st.susp || Object.keys(st.sig).some(function (k) { return st.sig[k]; }) || c.scr === 'fail';
+      c.shock = !!st.sig.shock;
+      return c;
+    },
+    status: function (c) { if (c.susp && c.st.pge !== 'yes') return ['bad', 'Рассмотреть PGE1']; if (c.st.pge === 'yes') return ['warn', 'На PGE1']; if (c.scr) return [c.scr === 'pass' ? 'ok' : 'warn', { pass: 'Скрининг пройден', retest: 'Повторить через 1 ч', fail: 'Скрининг не пройден' }[c.scr]]; return ['', 'Укажите SpO₂ или признаки']; },
+    eval: function (c) {
+      var e = [];
+      if (c.scr) e.push('Пульсоксиметрия: рука ' + c.pre + '%, нога ' + c.post + '%, разница ' + c.diff + '% — ' + { pass: 'пройдено (≥ 95% в обоих местах и разница ≤ 3%)', retest: 'повторить один раз через 1 ч (90–94% или разница ≥ 4%)', fail: 'не пройдено (≤ 89%) — сразу клиническая оценка и ЭхоКГ' }[c.scr] + ' (AAP 2025).');
+      if (c.st.pge === 'yes' && (c.w || 0) < 2000) e.push('Апноэ на PGE1 чаще у детей < 2 кг и обычно в первый час введения — готовность к респираторной поддержке.');
+      return e;
+    },
+    world: function (c) {
+      return [
+        { s: { f: '🇰🇿', c: 'Казахстан', d: 'КП МЗ РК «Стойкое фетальное кровообращение (ПЛГН)» №4 от 09.06.2016 — таблица препаратов', u: '#protocol-stoykoe-fetalnoe-kroobraschenie' }, v: 'Протокола по ВПС нет', t: 'Отдельного протокола РК по критическим ВПС у новорождённых в базе нет. Дозы алпростадила в протоколах РК есть только в протоколе ПЛГН (показание — лёгочная гипертензия): начальная 0,01–0,05 мкг/кг/мин, поддерживающая 0,005–0,02 мкг/кг/мин, подбор по клинике и ЭхоКГ.' },
+        { s: S.usChd, v: c.scr ? { pass: 'Пройден', retest: 'Повтор через 1 ч', fail: 'Не пройден' }[c.scr] : 'Скрининг', tone: c.scr === 'fail' ? 'bad' : c.scr === 'retest' ? 'warn' : c.scr === 'pass' ? 'ok' : '', t: 'Новый алгоритм AAP: пройден при SpO₂ ≥ 95% и на руке, и на ноге; если не пройден с первого раза — только один повтор (вместо двух).' },
+        { s: S.auChd, v: c.shock || c.susp ? 'Начать PGE1' : '—', tone: c.susp ? 'bad' : '', t: 'Для открытия протока — 0,1 мкг/кг/мин, эффект обычно через 30–60 мин, затем снижать. Для поддержания — 0,01–0,02 мкг/кг/мин. Дозы выше 0,1 редко эффективнее и опасны побочными эффектами.' },
+        { s: S.stChd, v: 'Низкие дозы', t: 'Старт и поддержание 0,01 мкг/кг/мин сохраняли проток открытым у 83% детей с критическими ВПС; угнетение дыхания с ИВЛ было редким, в основном у недоношенных. Апноэ на алпростадиле — у 10–12% детей с ВПС, дозозависимо, чаще < 2 кг и в первый час (UNC Newborn Critical Care Center).' }
+      ];
+    },
+    disagree: function () { return ['Стартовая доза PGE1: RCH Melbourne — 0,1 мкг/кг/мин для открытия протока; низкодозовые схемы — 0,01; таблица КП РК (ПЛГН) — 0,01–0,05.']; },
+    doses: function (c) {
+      if (!c.w) return null; var kg = c.w / 1000, h = function (x) { return fmt(x * 60 * kg, 2); };
+      return [
+        { n: 'Алпростадил, поддержание', t: '0,01–0,02 мкг/кг/мин = <b>' + h(0.01) + '–' + h(0.02) + ' мкг/ч</b>', s: 'RCH Melbourne; Vari 2020' },
+        { n: 'Алпростадил, открытие протока / шок', t: '0,05–0,1 мкг/кг/мин = <b>' + h(0.05) + '–' + h(0.1) + ' мкг/ч</b>', s: 'RCH Melbourne (0,1); КП РК ПЛГН (до 0,05)' }
+      ];
+    },
+    tact: [['low', 'PGE1 низкая доза'], ['high', 'PGE1 для открытия протока'], ['card', 'ЭхоКГ, кардиолог / перевод'], ['obs', 'Наблюдение']],
+    judge: function (t, c) {
+      var sup = [], ag = [];
+      if (t === 'low') { sup.push(S.auChd.s, S.stChd.s); if (!c.susp) ag.push('нет признаков проток-зависимого порока'); if (c.shock) ag.push('при шоке / закрывающемся протоке стартуют с 0,05–0,1'); }
+      if (t === 'high') { sup.push(S.auChd.s); if (!c.susp) ag.push('нет признаков проток-зависимого порока'); }
+      if (t === 'card') { sup.push(S.usChd.s); }
+      if (t === 'obs') { if (c.susp) ag.push('при подозрении на проток-зависимый ВПС PGE1 начинают до подтверждения диагноза'); if (c.scr === 'fail') ag.push('скрининг не пройден — сразу клиническая оценка'); if (c.scr === 'pass') sup.push(S.usChd.s); }
+      return J(sup, ag);
+    },
+    text: function (c, t) {
+      var st = c.st, p = [], kg = c.w ? c.w / 1000 : null, sig = Object.keys(st.sig).filter(function (k) { return st.sig[k]; }).map(function (k) { return { puls: 'ослаблена пульсация на бедренных артериях', shock: 'признаки шока / ацидоз', cyan: 'цианоз, не купирующийся кислородом', murm: 'систолический шум' }[k]; });
+      if (c.pre != null || c.post != null) p.push('SpO₂ на правой руке ' + (c.pre != null ? c.pre + '%' : '—') + ', на ноге ' + (c.post != null ? c.post + '%' : '—') + '.');
+      if (sig.length) p.push(cap(sig.join(', ')) + '.');
+      if (st.susp) p.push('Подозрение на проток-зависимый врождённый порок сердца.');
+      if (t === 'low') p.push('Начата / продолжена инфузия алпростадила 0,01 мкг/кг/мин' + (kg ? ' (' + fmt(0.01 * 60 * kg, 2) + ' мкг/ч)' : '') + ', мониторинг дыхания (риск апноэ).');
+      if (t === 'high') p.push('Начата инфузия алпростадила 0,05–0,1 мкг/кг/мин для открытия протока' + (kg ? ' (' + fmt(0.05 * 60 * kg, 2) + '–' + fmt(0.1 * 60 * kg, 2) + ' мкг/ч)' : '') + ' с последующим снижением до минимальной эффективной; готовность к респираторной поддержке.');
+      if (t === 'card') p.push('Проведена / запланирована ЭхоКГ, консультация детского кардиолога / кардиохирурга по вопросу перевода.');
+      if (t === 'obs') p.push('Данных за проток-зависимый порок нет, наблюдение.');
+      return p.join(' ');
+    }
+  };
+
+  /* ================= ОСТАЛЬНЫЕ ПРОТОКОЛЫ РК (короткая карточка) ================= */
+  var KZK = [
+    ['gbn', /(?:^|[^а-я])гбн(?![а-я])|гемолитическ[а-я]* болезн|резус[- ]?(?:конфликт|несовместим|сенсибилиз)/],
+    ['neonatalnaya-zheltuha', /желтух|гипербилирубин|фототерап|(?:^|[^а-я])зпк(?![а-я])|заменн[а-я]* переливан/],
+    ['gie', /(?:^|[^а-я])гиэ(?![а-я])|гипоксически[- ]ишемическ|энцефалопати/],
+    ['asfiksiya-pri-rozhdenii', /асфикси/],
+    ['gipotermiya-lechebnaya', /лечебн[а-я]* гипотерми|терапевтическ[а-я]* гипотерми|(?:^|[^а-я])охлажд/],
+    ['bld', /(?:^|[^а-я])блд(?![а-я])|бронхол[её]гочн[а-я]* дисплаз/],
+    ['vrozhdennaya-pnevmoniya', /пневмони/],
+    ['stoykoe-fetalnoe-kroobraschenie', /(?:^|[^а-я])плгн(?![а-я])|легочн[а-я]* гипертенз|персистирующ[а-я]* (?:фетальн|легочн)|стойк[а-я]* фетальн/],
+    ['gemorragicheskaya-bolezn', /геморрагическ[а-я]* болезн|дефицит[а-я]* витамин[а-я]* к/],
+    ['policitemiya', /полицитеми/],
+    ['ispolzovanie-preparatov-donorskoy-krovi', /гемотрансфуз|трансфузи|переливани[а-я]* (?:эритроц|крови|плазм|тромбо)|эритроцитарн[а-я]* масс|(?:^|[^а-я])сзп(?![а-я])|тромбоконцентрат/],
+    ['poroki-razvitiya-diafragmy', /диафрагмальн[а-я]* грыж|(?:^|[^а-я])вдг(?![а-я])/],
+    ['retinopatiya', /ретинопати/],
+    ['rodovaya-travma', /родов[а-я]* травм|кефалогематом|перелом[а-я]* ключиц|парез[а-я]* эрба/],
+    ['cmv', /(?:^|[^а-я])цмв(?![а-я])|цитомегал/],
+    ['giperammoniemiya', /гипераммони/],
+    ['krestcovookopchikovaya-teratoma', /тератом/],
+    ['parenteralnoe-pitanie', /парентеральн[а-я]* питани/]
+  ];
+  function kzCard(pid, re) {
+    var p = kzById[pid];
+    return {
+      id: 'kz-' + pid, icon: '📘', name: p.n, kp: pid, kw: re, kzOnly: 1, q: [],
+      ctx: function (st, b) { return { w: b.w, st: st }; },
+      status: function () { return ['', 'Протокол РК']; },
+      eval: function () { return ['Подробная карточка «как в мире» для этого заболевания ещё не добавлена. Схемы и дозы — в самом протоколе РК (ссылка ниже), в контексте показаний.']; },
+      world: function () { return [{ s: kzS(pid), v: 'Протокол РК', t: 'Протокол есть в приложении — откройте по ссылке. Кнопка «Лечение по протоколу РК» добавит в дневник ссылку на него.' }]; },
+      disagree: function () { return []; }, doses: function () { return null; },
+      tact: [['per', 'Лечение по протоколу РК']],
+      judge: function () { return J([kzDoc(pid)], []); },
+      text: function (c, t) { return t === 'per' ? 'Лечение проводится согласно клиническому протоколу МЗ РК «' + p.n + '» №' + p.no + ' от ' + p.d + '.' : ''; }
+    };
+  }
+
+  var LIST = [RDS, SEP, NEC, PDA, HYP, CHD].concat(KZK.filter(function (x) { return kzById[x[0]]; }).map(function (x) { return kzCard(x[0], x[1]); }));
+  var BY = {}; LIST.forEach(function (d) { BY[d.id] = d; });
+
+  function detect(text) {
+    var low = norm(text), out = [];
+    LIST.forEach(function (d) {
+      if ((d.kw.test(low) && !(d.skip && d.skip.test(low))) || (d.autodetect && d.autodetect(low))) out.push(d.id);
+    });
+    // если есть полная карточка по тому же протоколу — короткую не показываем
+    return out;
+  }
+  function make(id, text) { var d = BY[id]; return { id: id, st: d.init ? d.init(norm(text || '')) : {}, on: true, tact: '', why: '' }; }
+
+  window.__neoConds = { list: LIST, by: BY, detect: detect, make: make, line: line, S: S, kz: kzById, norm: norm, num: num, fmt: fmt, esc: esc, SEV: SEV };
 })();
 </script>
 <script id="aig-import">
