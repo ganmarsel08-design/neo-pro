@@ -143,3 +143,38 @@ async def test_bulk_skips_ambiguous_rows(browser, base):
     await page.locator('[data-bulk="k3"]').click(); await page.wait_for_timeout(200)
     kidsel = await page.locator('select[data-f="kid"]').evaluate_all("els=>els.map(e=>e.value)")
     assert kidsel == ['', 'k3'], 'строка с двумя возможными детьми остаётся без ребёнка'
+
+
+# ---- повторное ревью #6: запись без потери диктовки ----
+LIMIT_JS = """(n)=>{const o=Storage.prototype.setItem; window.__realSet=o; window.__okLeft=n;
+  Storage.prototype.setItem=function(k,v){ if(k==='neo.kids'){ if(window.__okLeft-- <= 0){const e=new Error('quota'); e.name='QuotaExceededError'; throw e;} } return o.call(this,k,v); };}"""
+TXT3 = "Сидорова в 10:00 ЭхоКГ. Петрова в 10:10 КОС. Сидорова в 10:20 санация."
+
+async def count_logs(page):
+    return await page.evaluate("Object.fromEntries(window.__neo.kids().map(k=>[k.id,(k.log||[]).map(e=>e.hm)]))")
+
+@pytest.mark.parametrize('ok_first', [0, 1, 2])
+async def test_save_failure_keeps_dictation_and_retries_only_failed(browser, base, ok_first):
+    page, errs, _ = await open_app(browser, base, kids)
+    await parse_open(page, TXT3)
+    await page.evaluate(LIMIT_JS, ok_first)
+    await page.locator('#dtConfirm').check()
+    while await page.locator('[data-ok]').count():
+        await page.locator('[data-ok]').first.click(); await page.wait_for_timeout(100)
+    await page.locator('#dtConfirm').check(); await page.locator('#dtSave').click(); await page.wait_for_timeout(500)
+    assert await page.locator('#dtSave').count() == 1, 'превью не закрыто'
+    assert 'НЕ записано' in await page.locator('#dtErr').inner_text()
+    assert f'Записано {ok_first}' in await page.locator('#dtErr').inner_text()
+    assert await page.locator('textarea[data-f="text"]').count() == 3, 'строки и правки на месте'
+    assert await page.locator('.dt-ok').count() == ok_first
+    logs = await count_logs(page)
+    assert sum(len(v) for v in logs.values()) == ok_first, ('в памяти только реально записанное', logs)
+    await page.evaluate("(()=>{Storage.prototype.setItem = window.__realSet;})()")
+    await page.locator('#dtConfirm').check(); await page.locator('#dtSave').click(); await page.wait_for_timeout(500)
+    assert await page.locator('#dtSave').count() == 0
+    logs = await count_logs(page)
+    assert sorted(logs['k1']) == ['10:00', '10:20'] and logs['k2'] == ['10:10'], ('без дублей', logs)
+    await page.reload(); await page.wait_for_timeout(600)
+    logs = await count_logs(page)
+    assert sorted(logs['k1']) == ['10:00', '10:20'] and logs['k2'] == ['10:10'], ('после перезагрузки', logs)
+    assert not errs, errs
