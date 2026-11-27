@@ -46,7 +46,7 @@ def kid(id, label, bd='2026-11-25', ga='32', bw='1800', **kw):
 
 async def open_app(browser, base, kids, now=(2026, 11, 26, 16, 0), hash='#kids', tools=True):
     """Новая вкладка с детьми и замороженными часами. Возвращает (page, errs, dialogs)."""
-    ctx = await browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+    ctx = await browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, timezone_id='Asia/Almaty', locale='ru-RU')
     page = await ctx.new_page(); errs, dialogs = [], []
     if now: await page.clock.install(time=datetime.datetime(*now, tzinfo=TZ))
     page.on('pageerror', lambda e: errs.append(str(e)))
