@@ -3512,7 +3512,8 @@ window.__neoSaveErr = function (err, key) {
       if (b.id === 'exBack') { stepInput(); return; }
       if (b.id === 'exBuild') {
         var bad = (E.conds || []).filter(function (e) { if (!e.on || !e.tact) return false; var j = C().by[e.id].judge(e.tact, cctx(E, e)); return j.hard.length && !(e.why || '').trim(); })[0];
-        if (bad) { var w = box.querySelector('[data-cwhy="' + bad.id + '"]'); if (w) { w.focus(); w.classList.add('dt-bad'); w.scrollIntoView({ block: 'center' }); } return; }
+        // правила-кандидаты (не утверждены экспертом) не блокируют запись: один раз показываем поле причины, повторное нажатие — собрать без неё
+        if (bad && E.whyAsked !== bad.id) { E.whyAsked = bad.id; var w = box.querySelector('[data-cwhy="' + bad.id + '"]'); if (w) { w.focus(); w.classList.add('dt-bad'); w.scrollIntoView({ block: 'center' }); } var bn = box.querySelector('#exBuild'); if (bn) bn.textContent = 'Собрать без причины'; return; }
         stepResult();
       }
     });
@@ -3577,7 +3578,7 @@ window.__neoSaveErr = function (err, key) {
     if (e.tact) {
       var j = d.judge(e.tact, c);
       if (j.sup.length) h += '<p class="ex-sup">✓ Опора: ' + esc(j.sup.join('; ')) + '</p>';
-      if (j.ag.length) h += '<div class="ex-ag"><b>⚠ ' + (j.hard.length ? 'Отличие от рекомендаций — нужна причина' : 'Расхождение с частью источников') + '</b>' + j.ag.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<textarea data-cwhy="' + e.id + '" rows="2" class="ctext" placeholder="' + (j.hard.length ? 'Обязательно' : 'По желанию') + ': почему так — например, решение консилиума, нарастание FiO₂, данные посева">' + esc(e.why) + '</textarea></div>';
+      if (j.ag.length) h += '<div class="ex-ag"><b>⚠ ' + (j.hard.length ? 'Отличие от протокола РК — укажите причину' : 'Расхождение с частью источников') + '</b>' + j.ag.map(function (x) { return '<p>' + esc(x) + '</p>'; }).join('') + '<textarea data-cwhy="' + e.id + '" rows="2" class="ctext" placeholder="' + (j.hard.length ? 'Желательно' : 'По желанию') + ': почему так — например, решение консилиума, нарастание FiO₂, данные посева">' + esc(e.why) + '</textarea></div>';
     }
     var tx = ctext(E, e);
     if (tx) h += '<p class="meta">В дневник:</p><blockquote class="ex-q">' + esc(tx) + '</blockquote>';
