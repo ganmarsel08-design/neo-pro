@@ -2589,7 +2589,7 @@ window.__neoSaveErr = function (err, key) {
   function addEvent(kid, o) {
     var k = getKid(kid); if (!k) return null;
     var it = { id: uid(), date: o.date, hm: o.hm, type: o.type, text: clean(o.text), ts: Date.now() };
-    if (o.just && o.just.length) it.just = o.just; if (o.jr) it.jr = o.jr;
+    if (o.just && o.just.length) it.just = o.just; if (o.jr) it.jr = o.jr; if (o.src) it.src = o.src;
     inject(k, it); (k.log = k.log || []).push(it); var f0 = window.__neoSaveFails || 0; N().save(k); if ((window.__neoSaveFails || 0) !== f0) it.unsaved = true; return it;
   }
   function delEvent(kid, id) {
@@ -2880,7 +2880,7 @@ window.__neoSaveErr = function (err, key) {
     }
     return out.slice(0, 6);
   }
-  var TIME_RE = /(?:^|[\s(])(?:в\s+)?(\d{1,2}):(\d{2})(?!\d)/i;
+  var TIME_RE = /(?:^|[\s(])(?:в\s+)?(\d{1,2}):(\d{2})(?!\d)/i, TIME_ALL = /(?:^|[\s(])(?:в\s+)?(\d{1,2}):(\d{2})(?!\d)/ig;
   var VERB_RE = /^(?:назначил[аи]?|назначен[оаы]?|начал[аи]?|начат[оаы]?|подключил[аи]?|отменил[аи]?|отменен[оаы]?|поступил[аи]?|выполнил[аи]?|пров[её]л[аи]?|сделал[аи]?|вв[её]л[аи]?)(?![а-я])[\s,:—–-]*/i;
   var NW = '(?:^|[^а-я])', NE = '(?![а-я])';
   // порядок важен: «назначил рентген» — это назначение, «снизил PIP» — изменение, «ЭхоКГ: снижение СВ» — исследование
@@ -2897,10 +2897,23 @@ window.__neoSaveErr = function (err, key) {
   ];
   var typeOf = function (lc) { for (var i = 0; i < RULES.length; i++) if (RULES[i][1].test(lc)) return RULES[i][0]; return 'note'; };
   var toMin = function (hm) { return +hm.slice(0, 2) * 60 + +hm.slice(3); };
+  // все времена фразы; дата НЕ угадывается: время позже «сейчас» (+30 мин) — дата не определена, её выбирает врач
+  function timesIn(c) {
+    var out = [], m; TIME_ALL.lastIndex = 0;
+    while ((m = TIME_ALL.exec(c))) { if (+m[1] <= 23 && +m[2] <= 59) out.push({ hm: pad(+m[1]) + ':' + m[2], at: m.index, len: m[0].length }); }
+    return out;
+  }
+  function cutTime(c, t) { return (c.slice(0, t.at) + ' ' + c.slice(t.at + t.len)).trim(); }
+  function shape(c) {
+    c = c.replace(/^[\s,:—–-]+|[\s,.;]+$/g, '').replace(/^(?:и|а|потом|затем|также)\s+/i, '');
+    var type = typeOf(norm(c)), st = c.replace(VERB_RE, '').replace(/^[\s,:—–-]+/, '').trim();
+    return { type: type, text: st || (type === 'adm' ? '' : c) };
+  }
+  function dateFor(hm, nowT, tdy) { return toMin(hm) > toMin(nowT) + 30 ? { date: '', how: 'ask' } : { date: tdy, how: 'default' }; }
   // kidHow: start — метка в начале фразы; block — по заголовку «Фамилия:»; '' — не определён (amb — кого упомянули)
   // hmHow:  said — названо; prev — как у предыдущей фразы ЭТОГО ЖЕ ребёнка; now — не названо, стоит текущее
   function parseDictation(text, kids) {
-    var rows = [], info = (kids || []).map(kidKeys), block = null, nowT = nowHM(), tdy = today(), yst = N().prev(tdy);
+    var rows = [], info = (kids || []).map(kidKeys), block = null, nowT = nowHM(), tdy = today();
     String(text || '').split(/\n\s*\n/).forEach(function (para) {
       block = null;
       para.replace(/([.!?;])\s+/g, '$1\u0001').split(/\u0001|\n+/).forEach(function (c0) {
@@ -2913,19 +2926,20 @@ window.__neoSaveErr = function (err, key) {
         } else if (mm) {
           amb = mm.amb.map(function (k) { return k.id; }); hint = mm.hint ? mm.hint.id : ''; block = null;
         } else if (block) { kid = block.kid; how = 'block'; }
-        var tm = TIME_RE.exec(c), hm = '';
-        if (tm && +tm[1] <= 23 && +tm[2] <= 59) { hm = pad(+tm[1]) + ':' + tm[2]; c = (c.slice(0, tm.index) + ' ' + c.slice(tm.index + tm[0].length)).trim(); }
-        c = c.replace(/^[\s,:—–-]+|[\s,.;]+$/g, '').replace(/^(?:и|а|потом|затем|также)\s+/i, '');
-        var type = typeOf(norm(c));
-        c = c.replace(VERB_RE, '').replace(/^[\s,:—–-]+/, '').trim();
-        if (!c && type !== 'adm') return;
-        var prev = rows[rows.length - 1], hmHow = 'said';
-        if (!hm) {
-          if (kid && prev && prev.kid === kid && prev.hmHow !== 'now') { hm = prev.hm; hmHow = 'prev'; }
-          else { hm = nowT; hmHow = 'now'; }
+        var phrase = c0.trim(), ts = timesIn(c), hm = '', multi = null;
+        if (ts.length > 1 && ts.some(function (t) { return t.hm !== ts[0].hm; })) multi = ts.map(function (t) { return t.hm; }).filter(function (h, i, a) { return a.indexOf(h) === i; });
+        else if (ts.length) { hm = ts[0].hm; c = cutTime(c, ts[0]); }
+        var sh = shape(c); c = sh.text;
+        if (!c && sh.type !== 'adm') return;
+        var prev = rows[rows.length - 1], hmHow = 'said', dt;
+        if (multi) { hmHow = 'multi'; hm = ''; dt = { date: tdy, how: 'default' }; }
+        else if (!hm) {
+          if (kid && prev && prev.kid === kid && prev.hmHow !== 'now' && prev.hm) { hm = prev.hm; hmHow = 'prev'; dt = { date: prev.date, how: prev.dateHow === 'doc' ? 'prev' : prev.dateHow }; }
+          else { hm = nowT; hmHow = 'now'; dt = { date: tdy, how: 'default' }; }
         }
-        rows.push({ kid: kid, kidHow: how, amb: amb, hint: hint, blockLabel: how === 'block' ? block.label : '', hm: hm, hmHow: hmHow,
-          date: toMin(hm) > toMin(nowT) + 30 ? yst : tdy, type: type, text: c, on: true, guess: hmHow !== 'said' });
+        if (!dt) dt = dateFor(hm, nowT, tdy);
+        rows.push({ kid: kid, kidHow: how, amb: amb, hint: hint, blockLabel: how === 'block' ? block.label : '', hm: hm, hmHow: hmHow, times: multi, phrase: phrase,
+          date: dt.date, dateHow: dt.how, type: sh.type, text: c, on: true, guess: hmHow !== 'said' });
       });
     });
     return rows;
@@ -2968,27 +2982,54 @@ window.__neoSaveErr = function (err, key) {
     if (ks.length > 1) return '<p class="meta dt-g">Во фразе несколько детей (' + ks.map(function (k) { return esc(kidName(k)); }).join(', ') + ') — выберите одного или разделите фразу.</p>';
     return '';
   }
+  function dateNote(r) {
+    if (r.dateHow === 'ask') return '<p class="meta dt-g">Время ' + esc(r.hm) + ' позже текущего (' + esc(nowHM()) + ') — какая дата? <button type="button" class="dt-sug" data-dt="yst">Вчера ' + esc(fmtD(N().prev(today()))) + '</button><button type="button" class="dt-sug" data-dt="tdy">Сегодня ' + esc(fmtD(today())) + '</button></p>';
+    if (r.date && r.date !== today()) return '<p class="meta dt-g">Дата не сегодняшняя: ' + esc(fmtD(r.date)) + '.</p>';
+    return '';
+  }
+  function fmtD(d) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? m[3] + '.' + m[2] : String(d || ''); }
   function timeNote(r) {
-    if (r.hmHow === 'prev') return '<p class="meta dt-g">Время не называли — как у предыдущего события этого ребёнка (' + esc(r.hm) + ').</p>';
-    if (r.hmHow === 'now') return '<p class="meta dt-g">Время не называли — стоит текущее ' + esc(r.hm) + '. Исправьте, если было раньше.</p>';
+    if (r.hmHow === 'multi') return '<p class="meta dt-g">Во фразе несколько времён (' + r.times.map(function (h) { return '<button type="button" class="dt-sug" data-pick="' + esc(h) + '">' + esc(h) + '</button>'; }).join('') + ') — выберите время события или <button type="button" class="dt-sug" data-split="1">разделите на события</button>.</p>';
+    var ok = r.guess ? ' <button type="button" class="dt-sug" data-ok="1">Время верно</button>' : '';
+    if (r.hmHow === 'prev') return '<p class="meta dt-g">Время не называли — как у предыдущего события этого ребёнка (' + esc(r.hm) + ').' + ok + '</p>';
+    if (r.hmHow === 'now') return '<p class="meta dt-g">Время не называли — стоит текущее ' + esc(r.hm) + '. Исправьте, если было раньше.' + ok + '</p>';
     return '';
   }
   function fixHTML(r) {
     var a = medSuggestions(r.text);
     return a.length ? '<p class="meta dt-fix">Возможно, ошибка распознавания: ' + a.map(function (x, i) { return '<button type="button" class="dt-sug" data-fix="' + i + '">«' + esc(x.from) + '» → «' + esc(x.to) + '»</button>'; }).join(' ') + '</p>' : '';
   }
+  // правка времени: дата пересчитывается по правилу, если врач её не выбирал сам; врач видит результат в поле даты
+  function setHm(r, hm) {
+    r.hm = hm; r.hmHow = 'doc'; r.guess = false; r.times = null;
+    if (r.dateHow !== 'doc') { var d = dateFor(hm, nowHM(), today()); r.date = d.date; r.dateHow = d.how; }
+  }
+  function splitRow(r) {
+    var ts = timesIn(r.text); if (ts.length < 2) return [r];
+    var out = [], pre = r.text.slice(0, ts[0].at);
+    ts.forEach(function (t, i) {
+      var seg = r.text.slice(t.at + t.len, i + 1 < ts.length ? ts[i + 1].at : undefined);
+      seg = (i === 0 ? pre + ' ' : '') + seg;
+      var sh = shape(seg), d = dateFor(t.hm, nowHM(), today());
+      out.push({ kid: r.kid, kidHow: r.kidHow, amb: r.amb, hint: r.hint, blockLabel: r.blockLabel, hm: t.hm, hmHow: 'said', times: null, phrase: r.phrase,
+        date: d.date, dateHow: d.how, type: sh.type, text: sh.text, on: r.on, guess: false });
+    });
+    return out;
+  }
   function renderPreview() {
     var kids = kidsList(), rows = D.rows;
     var kidSel = function (id) { return '<select data-f="kid"' + (id ? '' : ' class="dt-bad"') + '><option value="">— выберите ребёнка —</option>' + kids.map(function (k) { return '<option value="' + esc(k.id) + '"' + (k.id === id ? ' selected' : '') + '>' + esc(kidName(k)) + '</option>'; }).join('') + '</select>'; };
     var typeSel = function (t) { return '<select data-f="type">' + TYPES.map(function (x) { return '<option value="' + x.k + '"' + (x.k === t ? ' selected' : '') + '>' + x.l + '</option>'; }).join('') + '</select>'; };
     var nKids = {}, named = {}; rows.forEach(function (r) { if (r.kid) { nKids[r.kid] = 1; named[r.kid] = 1; } (r.amb || []).forEach(function (id) { named[id] = 1; }); });
-    var noKid = rows.filter(function (r) { return r.on && !r.kid; }).length;
+    var isAmb = function (r) { return r.amb && r.amb.length; };
+    var noKid = rows.filter(function (r) { return r.on && !r.kid && !isAmb(r); }).length, nAmb = rows.filter(function (r) { return r.on && !r.kid && isAmb(r); }).length;
     var bulk = noKid ? '<div class="dt-bulk card"><p class="meta">Без ребёнка: ' + noKid + '. Отнести все к:</p><div class="chips">' + kids.filter(function (k) { return named[k.id]; }).concat(kids.filter(function (k) { return !named[k.id]; })).slice(0, 8).map(function (k) { return '<button type="button" class="chip" data-bulk="' + esc(k.id) + '">' + esc(kidName(k)) + '</button>'; }).join('') + '</div></div>' : '';
+    if (nAmb) bulk += '<p class="meta dt-g">Строк с несколькими возможными детьми: ' + nAmb + ' — выберите ребёнка в каждой отдельно, общая кнопка их не трогает.</p>';
     var html = '<div class="sl-h"><b>Проверьте разбор</b><button type="button" class="sl-x" data-close aria-label="Закрыть">✕</button></div>' +
       '<p class="meta">Событий: ' + rows.length + ', детей: ' + Object.keys(nKids).length + '. Жёлтым — то, что не названо явно. Лишнее снимите галочкой.</p>' + bulk +
       rows.map(function (r, i) {
         return '<div class="dt-row card" data-i="' + i + '"><div class="dt-l1"><input type="checkbox" data-f="on"' + (r.on ? ' checked' : '') + '>' + kidSel(r.kid) + '</div>' + kidNote(r) +
-          '<div class="dt-l2"><input type="time" data-f="hm" value="' + esc(r.hm) + '"' + (r.guess ? ' class="dt-guess"' : '') + '>' + typeSel(r.type) + '</div>' + timeNote(r) +
+          '<div class="dt-l2"><input type="date" data-f="date" value="' + esc(r.date) + '"' + (r.dateHow === 'ask' || !r.date ? ' class="dt-guess"' : '') + '><input type="time" data-f="hm" value="' + esc(r.hm) + '"' + (r.guess || !r.hm ? ' class="dt-guess"' : '') + '>' + typeSel(r.type) + '</div>' + dateNote(r) + timeNote(r) +
           '<textarea data-f="text" rows="2" class="ctext">' + esc(r.text) + '</textarea><div class="dt-fixes">' + fixHTML(r) + '</div><div class="dt-h">' + rowHints(r) + '</div></div>';
       }).join('') + (rows.some(function (r) { return /ph-diff|ph-conflict/.test(rowHints(r)); }) ? '<p class="meta">Отличие от протокола можно обосновать после записи: в карточке ребёнка или в ленте смены (✎).</p>' : '') +
       '<details class="dt-raw"><summary>Исходная диктовка</summary><p>' + esc(D.text) + '</p></details>' +
@@ -3001,7 +3042,8 @@ window.__neoSaveErr = function (err, key) {
       var row = el.closest('.dt-row'); if (!row) return; var r = rows[+row.dataset.i], f = el.dataset.f;
       if (f === 'on') r.on = el.checked;
       else if (f === 'kid') { if (r.kid === el.value) return; r.kid = el.value; r.kidHow = 'doc'; el.classList.toggle('dt-bad', !el.value); }
-      else if (f === 'hm') { if (!el.value || r.hm === el.value) return; r.hm = el.value; r.hmHow = 'doc'; r.guess = false; el.classList.remove('dt-guess'); }
+      else if (f === 'hm') { if (!el.value || r.hm === el.value) return; setHm(r, el.value); renderPreview(); return; }
+      else if (f === 'date') { if (!el.value || r.date === el.value) return; r.date = el.value; r.dateHow = 'doc'; renderPreview(); return; }
       else if (f === 'text') { if (r.text === el.value) return; r.text = el.value; row.querySelector('.dt-fixes').innerHTML = fixHTML(r); }
       else r[f] = el.value;
       unconfirm();
@@ -3013,8 +3055,12 @@ window.__neoSaveErr = function (err, key) {
       var b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-close')) { closeSheet(); return; }
       var row = b.closest('.dt-row'), r = row ? rows[+row.dataset.i] : null;
+      if (r && b.dataset.dt) { r.date = b.dataset.dt === 'yst' ? N().prev(today()) : today(); r.dateHow = 'doc'; renderPreview(); return; }
+      if (r && b.dataset.pick) { setHm(r, b.dataset.pick); renderPreview(); return; }
+      if (r && b.dataset.ok) { r.guess = false; r.hmOk = true; renderPreview(); return; }
+      if (r && b.dataset.split) { var i0 = rows.indexOf(r); var parts = splitRow(r); if (parts.length > 1) { rows.splice.apply(rows, [i0, 1].concat(parts)); } renderPreview(); return; }
       if (b.dataset.sug && r) { r.kid = b.dataset.sug; r.kidHow = 'doc'; renderPreview(); return; }
-      if (b.dataset.bulk) { rows.forEach(function (x) { if (x.on && !x.kid) { x.kid = b.dataset.bulk; x.kidHow = 'doc'; } }); renderPreview(); return; }
+      if (b.dataset.bulk) { rows.forEach(function (x) { if (x.on && !x.kid && !(x.amb && x.amb.length)) { x.kid = b.dataset.bulk; x.kidHow = 'doc'; } }); renderPreview(); return; }
       if (b.dataset.fix != null && r) {
         var s = medSuggestions(r.text)[+b.dataset.fix];
         if (s) { r.text = r.text.slice(0, s.at) + s.to + r.text.slice(s.at + s.from.length); if (r.type === 'note') r.type = typeOf(norm(r.text)); renderPreview(); }
@@ -3026,9 +3072,13 @@ window.__neoSaveErr = function (err, key) {
         if (!on.length) { err.textContent = 'Ничего не выбрано.'; err.hidden = false; return; }
         var alive = kidsList(), bad = on.filter(function (x) { return !alive.some(function (k) { return k.id === x.kid; }); }).length;
         if (bad) { err.textContent = 'У ' + bad + ' событий не выбран ребёнок.'; err.hidden = false; return; }
+        var noDt = on.filter(function (x) { return !x.date || !x.hm; }).length;
+        if (noDt) { err.textContent = 'У ' + noDt + ' событий не выбрана дата или время.'; err.hidden = false; return; }
+        var gs = on.filter(function (x) { return x.guess; }).length;
+        if (gs) { err.textContent = 'У ' + gs + ' событий время предположено — выберите его или нажмите «Время верно».'; err.hidden = false; return; }
         if (!sh.querySelector('#dtConfirm').checked) { err.textContent = 'Отметьте, что проверили детей, время, препараты и дозы.'; err.hidden = false; return; }
         var added = [];
-        on.forEach(function (x) { var it = addEvent(x.kid, { date: x.date, hm: x.hm, type: x.type, text: x.text }); if (it) added.push({ kid: x.kid, id: it.id, unsaved: it.unsaved }); });
+        on.forEach(function (x) { var it = addEvent(x.kid, { date: x.date, hm: x.hm, type: x.type, text: x.text, src: { via: 'dict', phrase: x.phrase || '', hmHow: x.hmHow, hmOk: !!x.hmOk, dateHow: x.dateHow, kidHow: x.kidHow || '' } }); if (it) added.push({ kid: x.kid, id: it.id, unsaved: it.unsaved }); });
         D = { text: '', rows: null }; closeSheet(); refresh();
         if (added.some(function (a) { return a.unsaved; })) { toast('⚠ Часть событий НЕ сохранена — память заполнена.'); return; }
         toast('✓ Записано событий: ' + added.length, 'Отменить', function () { added.forEach(function (a) { delEvent(a.kid, a.id); }); refresh(); });
@@ -3073,7 +3123,7 @@ window.__neoSaveErr = function (err, key) {
     '.sl-time{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:end;margin:6px 0 8px}.sl-act{position:sticky;bottom:0;background:var(--card);padding:10px 0 2px;gap:8px;flex-wrap:wrap}.sl-act .btn{flex:1 1 30%;text-align:center}' +
     '.sl-list{list-style:none;margin:0 0 6px;padding:0}.sl-row{padding:10px 0;border-top:1px solid var(--line)}.sl-r1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.sl-r1 b{font-family:var(--num);font-size:17px}.sl-kid{font-weight:600}.sl-type{font-size:12.5px;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:2px 9px}' +
     '.sl-btns{margin-left:auto}.sl-btns button{border:0;background:none;font-size:17px;padding:4px 8px;cursor:pointer}.sl-txt{margin-top:3px;line-height:1.45;overflow-wrap:anywhere}.sl-txt mark{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:0 3px}' +
-    '.sl-lnk{border:0;background:none;color:var(--accent);font:600 14px var(--font);padding:6px 8px;cursor:pointer}.dt-row{margin:8px 0;padding:10px}.dt-l1,.dt-l2{display:flex;gap:8px;align-items:center;margin-bottom:6px}.dt-l1 select{flex:1;min-width:0}.dt-l2 input{width:120px}.dt-l2 select{flex:1;min-width:0}.dt-row textarea{width:100%;box-sizing:border-box}.dt-row select,.dt-row input[type=time]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:var(--r-in);background:var(--card-2);color:var(--ink)}.dt-bad{border-color:var(--bad)!important;background:var(--bad-bg)!important}.dt-g{margin:4px 2px 0;font-size:12.5px}.dt-l1 input[type=checkbox]{width:22px;height:22px}.sl-h span{display:flex;align-items:center}.sl-hints{margin:4px 0 6px}.dt-h .ph{margin:6px 0 0;padding:6px 9px}.sl-gh{margin:14px 2px 2px;font-size:15px}.sl-arr{margin:8px 0}.sl-arr ol{margin:6px 0 0;padding-left:22px}.sl-by,.sl-shifts{margin:6px 0}';
+    '.sl-lnk{border:0;background:none;color:var(--accent);font:600 14px var(--font);padding:6px 8px;cursor:pointer}.dt-row{margin:8px 0;padding:10px}.dt-l1,.dt-l2{display:flex;gap:8px;align-items:center;margin-bottom:6px}.dt-l1 select{flex:1;min-width:0}.dt-l2{flex-wrap:wrap}.dt-l2 input{width:128px}.dt-l2 select{flex:1;min-width:0}.dt-row textarea{width:100%;box-sizing:border-box}.dt-row select,.dt-row input[type=time],.dt-row input[type=date]{font:inherit;padding:8px;border:1px solid var(--line);border-radius:var(--r-in);background:var(--card-2);color:var(--ink)}.dt-bad{border-color:var(--bad)!important;background:var(--bad-bg)!important}.dt-g{margin:4px 2px 0;font-size:12.5px}.dt-l1 input[type=checkbox]{width:22px;height:22px}.sl-h span{display:flex;align-items:center}.sl-hints{margin:4px 0 6px}.dt-h .ph{margin:6px 0 0;padding:6px 9px}.sl-gh{margin:14px 2px 2px;font-size:15px}.sl-arr{margin:8px 0}.sl-arr ol{margin:6px 0 0;padding-left:22px}.sl-by,.sl-shifts{margin:6px 0}';
   document.head.appendChild(st);
   new MutationObserver(function () { clearTimeout(tick._t); tick._t = setTimeout(tick, 80); }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', function () { setTimeout(tick, 150); });
