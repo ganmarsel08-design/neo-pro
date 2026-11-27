@@ -1,0 +1,130 @@
+[
+ {
+  "file": "src/html-01.html",
+  "type": "html"
+ },
+ {
+  "file": "src/styles.css",
+  "type": "style",
+  "attrs": ""
+ },
+ {
+  "file": "src/html-02.html",
+  "type": "html"
+ },
+ {
+  "file": "src/modules/save-guard.js",
+  "type": "script",
+  "attrs": "id=\"save-guard\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "data/protocols.json",
+  "type": "json",
+  "attrs": "type=\"application/json\" id=\"proto-src\""
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/app.js",
+  "type": "script",
+  "attrs": "",
+  "minify": true
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/sw-register.js",
+  "type": "script",
+  "attrs": "",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/quick-input.js",
+  "type": "script",
+  "attrs": "id=\"quick-input\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/shift-tools.js",
+  "type": "script",
+  "attrs": "id=\"shift-tools\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/proto-hints.js",
+  "type": "script",
+  "attrs": "id=\"proto-hints\"",
+  "minify": false,
+  "subst": {
+   "__RULES_DATA__": "data/antidefect-rules.json"
+  }
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/shift-log.js",
+  "type": "script",
+  "attrs": "id=\"shift-log\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/express.js",
+  "type": "script",
+  "attrs": "id=\"express\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/conds.js",
+  "type": "script",
+  "attrs": "id=\"conds\"",
+  "minify": false,
+  "subst": {
+   "__KZ_DATA__": "data/kz-protocols-meta.json"
+  }
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
+  "file": "src/modules/aig-import.js",
+  "type": "script",
+  "attrs": "id=\"aig-import\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n</body>\n</html>\n"
+ }
+]
