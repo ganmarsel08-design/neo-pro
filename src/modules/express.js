@@ -97,9 +97,12 @@
 
   /* ================= КАРТОЧКИ ЗАБОЛЕВАНИЙ (conds.js) ================= */
   var C = function () { return window.__neoConds; };
+  // Единый вход расчёта доз: только строгие конечные положительные числа; масса — ТЕКУЩАЯ, названная врачом (масса при рождении для доз не подставляется);
+  // возраст/срок не подставляются нулями — null означает «неизвестно», и режимы, зависящие от них, не выбираются.
+  function numS(x) { if (x == null) return null; if (typeof x === 'number') return isFinite(x) && x > 0 ? x : null; var s = String(x).trim(); if (!/^\d+(?:[.,]\d+)?$/.test(s)) return null; var v = parseFloat(s.replace(',', '.')); return isFinite(v) && v > 0 ? v : null; }
   function base(E) {
-    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
-    return { k: k, ga: k ? num(k.ga) : null, dol: E.f.dol != null ? num(E.f.dol) : (k ? dol(k, E.date) : null), w: num(E.f.w) || (k ? num(k.bw) : null), f: E.f, date: E.date };
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null, dl = E.f.dol != null ? numS(E.f.dol) : (k ? dol(k, E.date) : null);
+    return { k: k, ga: k ? numS(k.ga) : null, dol: dl != null && isFinite(dl) && dl >= 0 ? dl : null, w: numS(E.f.w), wBasis: numS(E.f.w) ? 'current' : null, wBirth: k ? numS(k.bw) : null, f: E.f, date: E.date };
   }
   function cctx(E, e) { var d = C().by[e.id]; return d.ctx(e.st, base(E)); }
   function ctext(E, e) {
@@ -425,7 +428,7 @@
     if (d.ci && !c.gate) h += qHTML(e, { k: d.ci.k, l: d.ci.l, t: 'multi', o: d.ci.o }, c).replace('class="chips', 'class="chips ex-ci');
     if (ds !== null || !d.kzOnly) h += ds ? '<h4 class="ex-wh">💊 Дозы на массу ' + b.w + ' г</h4><ul class="ex-dose">' + ds.map(function (x) {
       return '<li class="' + (x.bad ? 'no' : '') + '"><b>' + esc(x.n) + '</b>' + (x.bad ? ' <span class="ex-tag bad">противопоказан</span>' : '') + (x.note ? ' <span class="ex-tag warn">' + esc(x.note) + '</span>' : '') + '<p>' + x.t + '</p><span class="ex-src">' + esc(x.s) + '</span></li>';
-    }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : (d.doses && !d.kzOnly ? '<p class="meta">Укажите массу — посчитаю дозы.</p>' : '');
+    }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : (d.doses && !d.kzOnly ? '<p class="meta">Дозы скрыты: укажите ТЕКУЩУЮ массу (число, г). Масса при рождении' + (b.wBirth ? ' (' + b.wBirth + ' г)' : '') + ' для расчёта доз не используется.</p>' : '');
     h += '<h4 class="ex-wh">Ваше решение</h4><div class="chips ex-tact">' + d.tact.map(function (t) { return chip('data-ctact="' + e.id + '" data-v', t[0], esc(t[1]), e.tact === t[0]); }).join('') + '</div>';
     if (e.tact) {
       var j = d.judge(e.tact, c);
