@@ -65,3 +65,19 @@ async def test_ga_garbage_not_accepted(browser, base):
     page, errs, _ = await open_app(browser, base, [kid('r3', 'Дарханова', bd='2026-11-20', ga='32недели?', bw='1500')], now=(2026, 11, 27, 10, 0))
     r = await doses_for(page, {'w': '1500', 'dol': 5}, kid_id='r3')
     assert r['ga'] is None and not [x for x in r['doses'] if 'по сроку' in x['n']]
+
+
+@pytest.mark.parametrize('cid', ['pda', 'rds', 'sep', 'nec', 'hyp', 'chd'])
+@pytest.mark.parametrize('w', ['', '0', '-5', 'Infinity', '12abc'])
+async def test_all_cards_no_doses_on_bad_weight(browser, base, cid, w):
+    page, errs, _ = await open_app(browser, base, K, now=(2026, 11, 27, 10, 0))
+    r = await page.evaluate("""([w, cid])=>{
+      const X=window.__neoExpress; X.open({kid:'r1', f:{w:w, dol:5}, date:'2026-11-27'});
+      const E=X.state(); E.f=Object.assign(E.f||{}, {w:w, dol:5}); E.kid='r1'; E.date='2026-11-27';
+      const e=window.__neoConds.make(cid, ''); e.tact='start';
+      const c=X.cctx(E,e); const d=window.__neoConds.by[cid];
+      let ds=null; try{ ds=d.doses ? d.doses(c) : null }catch(x){ ds='ERR '+x }
+      return {w:c.w, ds:ds, text:X.ctext(E,e)};
+    }""", [w, cid])
+    assert r['w'] is None and not r['ds'], r
+    assert not __import__('re').search(r'<b>[\d.,]+ мг', r['text'] or ''), r['text']
