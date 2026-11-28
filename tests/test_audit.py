@@ -99,8 +99,7 @@ async def test_A5_handoff_unencrypted_warning(browser, base):
     assert 'не зашифрован' in (await page.locator('#shiftBox').text_content())
 
 
-# A6. Не исправлено: тот же ребёнок, заведённый на двух телефонах, приходит как «новый» — будет дубль карточки
-@pytest.mark.xfail(strict=True, reason='Открытый дефект: нет проверки похожих карточек при приёме смены (план — отдельный PR)')
+# A6. Исправлено (sync-events): тот же ребёнок, заведённый на двух телефонах, приходит как «новый» — будет дубль карточки
 async def test_A6_handoff_same_child_other_id_flagged(browser, base):
     page, errs, dlg = await open_app(browser, base, KIDS)
     await _take(page, [kid('x9', 'Петрова', bd='2026-11-20')])

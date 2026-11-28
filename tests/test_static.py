@@ -24,7 +24,6 @@ def test_kz_quotes_verbatim():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-@pytest.mark.xfail(strict=True, reason='Открытый дефект: синхронизация заменяет карточку целиком («последний победил»)')
 def test_sync_two_devices_keeps_both_edits():
     r = subprocess.run(['node', 'tests/sync_merge.js'], cwd=ROOT, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr

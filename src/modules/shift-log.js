@@ -102,7 +102,7 @@
     var k = getKid(kid); if (!k) return null;
     var it = (k.log || []).find(function (x) { return x.id === id; }); if (!it) return null;
     var snap = JSON.parse(JSON.stringify(it)), ok = uninject(k, it);
-    k.log = k.log.filter(function (x) { return x.id !== id; }); N().save(k); return { it: snap, ok: ok };
+    k.log = k.log.filter(function (x) { return x.id !== id; }); (k.ldel = k.ldel || {})[id] = Math.max(Date.now(), (snap && snap.ts) || 0); N().save(k); return { it: snap, ok: ok };
   }
   function editEvent(kid, id, o) {
     var k = getKid(kid); if (!k) return false;

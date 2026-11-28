@@ -451,8 +451,19 @@
           var m = mine.find(function (x) {
             return x.id === k.id;
           });
-          var st = !m ? "new" : (k.upd || 0) > (m.upd || 0) ? "newer" : "older";
-          return { k: k, st: st };
+          var st = !m ? "new" : (k.upd || 0) > (m.upd || 0) ? "newer" : "older",
+            sim = null;
+          if (!m) {
+            var nl = function (x) {
+              return String((x && x.label) || "").trim().toLowerCase();
+            };
+            sim = mine.find(function (x) {
+              return nl(x) && nl(x) === nl(k) && (!x.bd || !k.bd || x.bd === k.bd);
+            }) || mine.find(function (x) {
+              return x.bd && x.bd === k.bd && x.ga && x.ga === k.ga && x.bw && x.bw === k.bw;
+            });
+          }
+          return { k: k, st: st, sim: sim };
         });
       inn.innerHTML =
         '<div class="card"><b>В коде ' +
@@ -464,11 +475,13 @@
               '<label class="chk"><input type="checkbox" data-in="' +
               i +
               '" ' +
-              (r.st !== "older" ? "checked" : "") +
+              (r.st !== "older" && !r.sim ? "checked" : "") +
               "><span>" +
               esc(r.k.label) +
               " — " +
-              { new: "новый", newer: "обновит вашу карточку", older: "у вас уже новее" }[r.st] +
+              (r.sim
+                ? "ПОХОЖ на вашу карточку «" + esc(r.sim.label) + "» (другой код) — возможный дубль, не объединяется; отметьте, только если это другой ребёнок"
+                : { new: "новый", newer: "обновит вашу карточку", older: "у вас уже новее" }[r.st]) +
               "</span></label>"
             );
           })
@@ -484,6 +497,22 @@
           repl = picked.filter(function (r) {
             return r.st !== "new";
           });
+        var simil = picked.filter(function (r) {
+          return r.sim;
+        });
+        if (
+          simil.length &&
+          !confirm(
+            "Похожие карточки уже есть: " +
+              simil
+                .map(function (r) {
+                  return r.k.label;
+                })
+                .join(", ") +
+              ".\nЕсли это тот же ребёнок, будет дубль. Принять как отдельного ребёнка?",
+          )
+        )
+          return;
         if (
           old.length &&
           !confirm(
