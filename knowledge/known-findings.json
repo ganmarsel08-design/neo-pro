@@ -1,0 +1,8 @@
+[
+  {
+    "code": "DOSE_NO_WEIGHT_TIME",
+    "where": "G7-CMV-PRETERM-OFFLABEL",
+    "owner": "ChatGPT/Gemini (автор контракта)",
+    "reason": "В dose_guard.required_inputs нет weight_measured_at при дозах на кг (валганцикловир/ганцикловир). Исходный файл не изменён; нужна правка автора контракта до включения правила. Правило остаётся candidate_rule/pending_expert."
+  }
+]

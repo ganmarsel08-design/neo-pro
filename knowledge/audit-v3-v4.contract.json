@@ -1,0 +1,718 @@
+{
+  "schema_version": "knowledge-contract-v1.0.0",
+  "generated_at": "2026-11-28T16:12:00+05:00",
+  "repository": "https://github.com/ganmarsel08-design/neo-pro",
+  "coordination_issue": "https://github.com/ganmarsel08-design/neo-pro/issues/3",
+  "base_commit_sha": "04b0d80623d27e4d5b95860fd32fd19165a5cecd",
+  "meta_source_branch": "fix/dose-guard-20261128",
+  "protocols_29_modified": false,
+  "protocols_coverage": {
+    "total_kz_protocols": 29,
+    "audited_v1": [
+      "rds",
+      "sepsis",
+      "nek",
+      "diabeticheskaya-fetopatiya"
+    ],
+    "audited_v2": [
+      "asfiksiya-pri-rozhdenii",
+      "reanimaciya-novorozhdennyh",
+      "gie",
+      "gipotermiya-lechebnaya",
+      "parenteralnoe-pitanie",
+      "gbn",
+      "neonatalnaya-zheltuha",
+      "ispolzovanie-preparatov-donorskoy-krovi",
+      "stoykoe-fetalnoe-kroobraschenie",
+      "bld"
+    ],
+    "audited_v3": [
+      "enteralnoe-pitanie",
+      "uhod-za-malovesnymi",
+      "gipotermiya-cepochka",
+      "reanimaciya-nedonoshennyh-detey",
+      "uhod-za-rebenkom",
+      "gemorragicheskaya-bolezn",
+      "policitemiya",
+      "vrozhdennaya-pnevmoniya",
+      "cmv",
+      "retinopatiya",
+      "rodovaya-travma"
+    ],
+    "audited_v4": [
+      "poroki-razvitiya-diafragmy",
+      "krestcovookopchikovaya-teratoma",
+      "nek-pediatriya",
+      "giperammoniemiya"
+    ]
+  },
+  "recommendations": [
+    {
+      "recommendation_id": "G6-ENT-VITD-CEILING",
+      "card_id": "kz-enteralnoe-pitanie",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "guideline",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "ESPGHAN-2022-ENT",
+          "organization": "ESPGHAN Committee on Nutrition",
+          "title": "Enteral Nutrition in Preterm Infants (2022): A Position Paper",
+          "version_date": "2023-02-01",
+          "doi": "10.1097/MPG.0000000000003642",
+          "source_url": "https://pubmed.ncbi.nlm.nih.gov/36705703/",
+          "section": "Vitamin D / Iron / Gastric Residuals / Fortification",
+          "evidence_level": "LOE 2++, GOR B (Vit D); LOE 1+, GOR A (Iron)",
+          "population": "Preterm infants <1800 g birth weight",
+          "jurisdiction": "International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G6-ENT-01",
+        "G6-ENT-02",
+        "G6-ENT-03"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "weight_kg",
+          "weight_measured_at",
+          "ga_weeks",
+          "postnatal_day",
+          "vit_d_from_fortifier_iu",
+          "vit_d_supplement_iu",
+          "ferritin_ug_l",
+          "crp_mg_l"
+        ],
+        "dose_rules": {
+          "vit_d_iu_kg_day": "400-700",
+          "vit_d_max_iu_day": 1000,
+          "iron_mg_kg_day": "2-3",
+          "iron_hold_ferritin_ug_l": 300
+        }
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G6-01",
+          "text": "КП №177 требует рутинного GRV q6h, ESPGHAN 2022/2023 рекомендует отказ от рутинного GRV у стабильных недоношенных.",
+          "severity": "medium",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G6-RES-SUPERSEDED-2015",
+      "card_id": "kz-reanimaciya-nedonoshennyh-detey",
+      "revision": "1.0.0",
+      "supersedes": "reanimaciya-nedonoshennyh-detey-2015",
+      "regulatory_status": "candidate_rule",
+      "source_type": "national_protocol",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "KZ-CP-180-2023-RESUS",
+          "organization": "МЗ РК",
+          "title": "КП №180 Реанимация новорожденных",
+          "version_date": "2023-03-17",
+          "doi": null,
+          "source_url": "https://diseases.medelement.com/disease/%D1%80%D0%B5%D0%B0%D0%BD%D0%B8%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%BD%D0%BE%D0%B2%D0%BE%D1%80%D0%BE%D0%B6%D0%B4%D0%B5%D0%BD%D0%BD%D1%8B%D1%85-%D0%BA%D0%BF-%D1%80%D0%BA-2023/17611",
+          "section": "Полный протокол",
+          "evidence_level": null,
+          "population": "Новорождённые (включая недоношенных/ЭНМТ)",
+          "jurisdiction": "KZ",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G6-RES-01"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "ga_weeks",
+          "weight_g"
+        ],
+        "redirect_to": "reanimaciya-novorozhdennyh"
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G6-02",
+          "text": "КП №10-2015 замещён КП №180-2023; соблюдать запрет UCM <28 нед и sustained inflations >5 с (AHA/ERC 2025).",
+          "severity": "high",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G7-VKDB-ELBW-DOSE",
+      "card_id": "kz-gemorragicheskaya-bolezn",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "guideline",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "AAP-2022-VITK",
+          "organization": "American Academy of Pediatrics",
+          "title": "Vitamin K and the Newborn Infant",
+          "version_date": "2022-03-01",
+          "doi": "10.1542/peds.2021-056036",
+          "source_url": "https://publications.aap.org/pediatrics/article/149/3/e2021056036/184866/Vitamin-K-and-the-Newborn-Infant",
+          "section": "Recommendations",
+          "evidence_level": null,
+          "population": "Newborns (>1500 g and <=1500 g / ELBW)",
+          "jurisdiction": "US / International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G7-VKDB-01",
+        "G7-VKDB-02"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "weight_g",
+          "weight_measured_at",
+          "route",
+          "indication"
+        ],
+        "dose_rules": {
+          "gt_1500g_mg_im": 1.0,
+          "le_1500g_mg_kg_im": "0.3-0.5",
+          "syringe_required_elbw": "1 mL tuberculin"
+        }
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G7-01",
+          "text": "В КП №1-2014 указано 1 мг всем (2–5x передозировка у ЭНМТ) и 100 мкг/кг в/м при кровотечении (субтерапевтически + риск гематомы).",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G7-POLY-VENOUS-HT-PET",
+      "card_id": "kz-policitemiya",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "review",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "COCHRANE-OZEK-2010",
+          "organization": "Cochrane Neonatal",
+          "title": "Partial exchange transfusion to prevent neurodevelopmental disability in infants with polycythemia",
+          "version_date": "2010-01-20",
+          "doi": "10.1002/14651858.CD005089.pub2",
+          "source_url": "https://pubmed.ncbi.nlm.nih.gov/20091569/",
+          "section": "Main results (NEC RR 11.18)",
+          "evidence_level": "Systematic Review of RCTs",
+          "population": "Newborns with polycythemia (venous Ht >=65%)",
+          "jurisdiction": "International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G7-POLY-01"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "sample_type",
+          "venous_ht_pct",
+          "symptomatic",
+          "weight_kg"
+        ],
+        "pet_fluid": "0.9% NaCl only"
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G7-02",
+          "text": "Капиллярный Ht не использовать для решения о PET; рутинная PET у бессимптомных (Ht 65–75%) повышает риск НЭК (RR 11,18).",
+          "severity": "high",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G7-CMV-PRETERM-OFFLABEL",
+      "card_id": "kz-cmv",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "guideline",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "ECCI-2024",
+          "organization": "European Congenital Infection Initiative",
+          "title": "Consensus recommendations for diagnosis, prevention and treatment of congenital CMV",
+          "version_date": "2024-05-01",
+          "doi": "10.1016/j.lanepe.2024.100892",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10999471/",
+          "section": "Diagnosis & Antiviral Treatment",
+          "evidence_level": "Grade B–D",
+          "population": "Neonates with cCMV (RCTs >=32w & >=1800g only)",
+          "jurisdiction": "Europe / International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G7-CMV-01"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "ga_weeks",
+          "weight_g",
+          "pcr_sample_age_days",
+          "anc_count",
+          "alt_u_l"
+        ],
+        "dose_rules": {
+          "valganciclovir_po_mg_kg_q12h": 16,
+          "ganciclovir_iv_mg_kg_q12h": 6
+        }
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G7-03",
+          "text": "РКИ Kimberlin 2003/2015 включали только >=32 нед и >=1800 г; у ЭНМТ/недоношенных <32 нед — строго off-label по консилиуму + TDM.",
+          "severity": "high",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G8-ROP-RANIBIZUMAB-CAP",
+      "card_id": "kz-retinopatiya",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "trial",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "RAINBOW-2019",
+          "organization": "RAINBOW Study Group",
+          "title": "Ranibizumab versus laser therapy for the treatment of very low birthweight infants with ROP",
+          "version_date": "2019-10-26",
+          "doi": "10.1016/S0140-6736(19)31344-3",
+          "source_url": "https://pubmed.ncbi.nlm.nih.gov/31522845/",
+          "section": "Dosing & Outcomes (0.2 mg)",
+          "evidence_level": "Phase 3 RCT",
+          "population": "VLBW/ELBW <1500 g",
+          "jurisdiction": "International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G8-ROP-01",
+        "G8-ROP-02"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "ga_weeks",
+          "pma_weeks",
+          "birth_weight_g",
+          "rop_zone",
+          "rop_stage",
+          "plus_disease"
+        ],
+        "dose_rules": {
+          "ranibizumab_max_mg_per_eye": 0.2,
+          "max_injections_6m": 3
+        }
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G8-01",
+          "text": "Максимум ранибизумаба 0,2 мг на глаз (не путать со взрослой 0,5 мг); после анти-VEGF обязателен пролонгированный контроль реактивации до >=60–65 нед ПМВ.",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G8-TRAUMA-SGH-EMERGENCY",
+      "card_id": "kz-rodovaya-travma",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "local_protocol",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "STARSHIP-SGH-2021",
+          "organization": "Starship Child Health NZ",
+          "title": "Practice Recommendation for Neonatal Subgaleal Haemorrhage",
+          "version_date": "2021-02-01",
+          "doi": null,
+          "source_url": "https://media.starship.org.nz/practice-recommendation-for-neonatal-subgaleal-haemorrhage/Neonatal_Subgaleal_Haemorrhage_Feb_2021.pdf",
+          "section": "Recognition & Resuscitation",
+          "evidence_level": null,
+          "population": "Newborns with SGH (P12.2)",
+          "jurisdiction": "NZ / International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G8-TRAUMA-01",
+        "G8-TRAUMA-02"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "diagnosis_icd10",
+          "hc_delta_cm",
+          "ga_weeks",
+          "infected_flag"
+        ],
+        "blood_loss_estimate_ml_per_cm_hc": 40
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G8-02",
+          "text": "КП №35-2017 ошибочно описывает SGH (P12.2) как доброкачественное; реальная летальность 12–25%. Запрещена рутинная пункция кефалогематомы (P12.0) и тугое бинтование при SGH.",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G9-NEC-PED-SUPERSEDED",
+      "card_id": "kz-nek-pediatriya",
+      "revision": "1.0.0",
+      "supersedes": "nek-pediatriya-154-2021",
+      "regulatory_status": "candidate_rule",
+      "source_type": "national_protocol",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "KZ-CP-185-2023-NEC",
+          "organization": "МЗ РК",
+          "title": "КП №185 Некротизирующий энтероколит новорожденных",
+          "version_date": "2023-07-28",
+          "doi": null,
+          "source_url": "https://diseases.medelement.com/disease/%D0%BD%D0%B5%D0%BA%D1%80%D0%BE%D1%82%D0%B8%D0%B7%D0%B8%D1%80%D1%83%D1%8E%D1%89%D0%B8%D0%B9-%D1%8D%D0%BD%D1%82%D0%B5%D1%80%D0%BE%D0%BA%D0%BE%D0%BB%D0%B8%D1%82-%D0%BD%D0%BE%D0%B2%D0%BE%D1%80%D0%BE%D0%B6%D0%B4%D0%B5%D0%BD%D0%BD%D1%8B%D1%85-%D0%BA%D0%BF-%D1%80%D0%BA-2023/17718",
+          "section": "Паспорт (пересмотр 2021/2023)",
+          "evidence_level": null,
+          "population": "Новорождённые (P77)",
+          "jurisdiction": "KZ",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G9-NEC-01"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "patient_age_days"
+        ],
+        "redirect_to": "nek"
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G9-01",
+          "text": "КП №154-2021 является устаревшей редакцией неонатального P77, замещённой КП №185-2023.",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G9-CDH-VENT-AND-SCT-ICD",
+      "card_id": "kz-poroki-razvitiya-diafragmy",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "guideline",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "CANADIAN-CDH-2023",
+          "organization": "Canadian CDH Collaborative",
+          "title": "Diagnosis and management of congenital diaphragmatic hernia: 2023 update",
+          "version_date": "2024-05-01",
+          "doi": "10.1136/archdischild-2023-325865",
+          "source_url": "https://fn.bmj.com/content/109/3/239",
+          "section": "Delivery room, Ventilation, Hemodynamics, Surgery",
+          "evidence_level": "GRADE",
+          "population": "Neonates with CDH (Q79.0)",
+          "jurisdiction": "Canada / International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G9-CDH-01",
+        "G9-SCT-01"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "bag_mask_ventilation",
+          "pip_cmh2o",
+          "echo_lv_function",
+          "sct_icd10"
+        ],
+        "rules": {
+          "bag_mask_allowed": false,
+          "pip_max_cmh2o": 25,
+          "sct_forbidden_icd10": "C45.9",
+          "sct_correct_icd10": "C49.5"
+        }
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G9-02",
+          "text": "При ВДГ запрещена масочная ИВЛ (немедленная интубация + зонд) и обязательна ЭхоКГ-оценка ЛЖ перед iNO; в КП №238 ККТ ошибочен код C45.9 (мезотелиома) вместо C49.5.",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    },
+    {
+      "recommendation_id": "G10-HA-CKRT-SCAVENGERS",
+      "card_id": "kz-giperammoniemiya",
+      "revision": "1.0.0",
+      "supersedes": null,
+      "regulatory_status": "candidate_rule",
+      "source_type": "guideline",
+      "approval": {
+        "status": "pending_expert",
+        "advisory_only": true,
+        "reviewer": null,
+        "date": null,
+        "decision_ref": null
+      },
+      "sources": [
+        {
+          "source_id": "HABERLE-2019-UCD",
+          "organization": "European UCD Guidelines Group",
+          "title": "Suggested guidelines for the diagnosis and management of urea cycle disorders: First revision",
+          "version_date": "2019-11-01",
+          "doi": "10.1002/jimd.12100",
+          "source_url": "https://pubmed.ncbi.nlm.nih.gov/30982989/",
+          "section": "Tables 4–5, Rec. #9, #11, #20, #37",
+          "evidence_level": "GRADE",
+          "population": "Neonates & children with UCD / hyperammonemia",
+          "jurisdiction": "Europe / International",
+          "verified_at": "2026-11-28"
+        },
+        {
+          "source_id": "PCRRT-RAINA-2020",
+          "organization": "PCRRT Workgroup",
+          "title": "Non-kidney replacement therapy and CKRT in neonatal hyperammonemia",
+          "version_date": "2020-08-01",
+          "doi": "10.1038/s41581-020-0267-8",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7366888/",
+          "section": "Box 3–5, Rec. 10",
+          "evidence_level": "GRADE",
+          "population": "Neonates with hyperammonemia",
+          "jurisdiction": "International",
+          "verified_at": "2026-11-28"
+        }
+      ],
+      "conflicts": [
+        "G10-HA-01",
+        "G10-HA-02",
+        "G10-HA-03",
+        "G10-HA-04"
+      ],
+      "dose_guard": {
+        "required_inputs": [
+          "weight_kg",
+          "weight_measured_at",
+          "nh3_umol_l",
+          "sample_type",
+          "sample_age_min",
+          "confirmed_diagnosis",
+          "protein_off_hours",
+          "venous_access"
+        ],
+        "thresholds": {
+          "med_start_umol_l": 150,
+          "ckrt_prep_umol_l": 250,
+          "ckrt_immediate_umol_l": 500,
+          "max_protein_off_h": 48,
+          "max_sample_age_min": 15
+        },
+        "unregistered_kz_orphan_drugs": true
+      },
+      "safety_warnings": [
+        {
+          "id": "SW-G10-01",
+          "text": "КП №220-2024 пропускает CKRT, содержит в/в АК 1,5–1,75 г/кг/сут в кризе и опечатку «пожизненно» для в/в скэвенджеров. Запрещены L-аргинин при ARG1D, фенилбутират при PA/MMA, ЗПК и вальпроат.",
+          "severity": "critical",
+          "blocking": false,
+          "review_status": "pending_expert"
+        }
+      ]
+    }
+  ],
+  "synthetic_tests": [
+    {
+      "id": "TEST-G6-01",
+      "group": "G6",
+      "assertion": "routine GRV q6h in stable preterm emits SOURCE_CONFLICT_INFO (G6-ENT-01)"
+    },
+    {
+      "id": "TEST-G6-02",
+      "group": "G6",
+      "assertion": "total Vit D > 1000 IU/day emits HARD_WARN_DOSE_GUARD"
+    },
+    {
+      "id": "TEST-G6-03",
+      "group": "G6",
+      "assertion": "ferritin > 300 ug/L with CRP <= 5 emits HOLD_IRON_FERRITIN_HIGH"
+    },
+    {
+      "id": "TEST-G6-04",
+      "group": "G6",
+      "assertion": "reanimaciya-nedonoshennyh-detey (2015) redirects to reanimaciya-novorozhdennyh (180-2023)"
+    },
+    {
+      "id": "TEST-G7-01",
+      "group": "G7",
+      "assertion": "weight <= 1500g with Vit K 1.0 mg emits VITK_ELBW_OVERDOSE_GT_0_5_MG_KG"
+    },
+    {
+      "id": "TEST-G7-02",
+      "group": "G7",
+      "assertion": "capillary Ht blocks PET; asymptomatic venous Ht 68% emits NO_ROUTINE_PET_NEC_RISK"
+    },
+    {
+      "id": "TEST-G7-03",
+      "group": "G7",
+      "assertion": "preterm pneumonia chest_percussion=true emits WARN_CONTRAINDICATED_PRETERM_IVH"
+    },
+    {
+      "id": "TEST-G7-04",
+      "group": "G7",
+      "assertion": "cCMV PCR age > 21d flags cannot distinguish congenital; GA < 32w valganciclovir flags OFF_LABEL_LT32W_TDM"
+    },
+    {
+      "id": "TEST-G8-01",
+      "group": "G8",
+      "assertion": "ranibizumab > 0.2 mg/eye emits ROP_RANIBIZUMAB_GT_0_2_MG; anti_vegf activates reactivation tracker"
+    },
+    {
+      "id": "TEST-G8-02",
+      "group": "G8",
+      "assertion": "Type 2 ROP recommends observation with КП №166 divergence note"
+    },
+    {
+      "id": "TEST-G8-03",
+      "group": "G8",
+      "assertion": "uninfected cephalohematoma P12.0 puncture emits CEPHALOHEMATOMA_ROUTINE_PUNCTURE_FORBIDDEN"
+    },
+    {
+      "id": "TEST-G8-04",
+      "group": "G8",
+      "assertion": "SGH P12.2 hc_delta_cm=1.5 estimates ~60 mL loss and emits shock/transfusion alert"
+    },
+    {
+      "id": "TEST-G8-05",
+      "group": "G8",
+      "assertion": "GA 26w GMH-IVH blocks coding as Birth Trauma P10 and suggests P52"
+    },
+    {
+      "id": "TEST-G9-01",
+      "group": "G9",
+      "assertion": "nek-pediatriya (154-2021) emits PROTOCOL_SUPERSEDED_REDIRECT_TO_NEK_185_2023"
+    },
+    {
+      "id": "TEST-G9-02",
+      "group": "G9",
+      "assertion": "CDH Q79.0 bag_mask_ventilation=true blocks and demands immediate intubation; PIP > 25 warns"
+    },
+    {
+      "id": "TEST-G9-03",
+      "group": "G9",
+      "assertion": "SCT icd10=C45.9 blocks mesothelioma code and suggests C49.5; neonatal AFP tracks T_half"
+    },
+    {
+      "id": "TEST-G10-01",
+      "group": "G10",
+      "assertion": "ammonia capillary or sample_age_min > 15 emits FLAG_INVALID_AMMONIA_PREANALYTICS_RETEST"
+    },
+    {
+      "id": "TEST-G10-02",
+      "group": "G10",
+      "assertion": "nh3 > 500 umol/L triggers ALERT_START_CKRT_IMMEDIATELY and blocks exchange transfusion"
+    },
+    {
+      "id": "TEST-G10-03",
+      "group": "G10",
+      "assertion": "ARG1D blocks L-arginine; confirmed PA_MMA blocks phenylbutyrate/phenylacetate"
+    },
+    {
+      "id": "TEST-G10-04",
+      "group": "G10",
+      "assertion": "protein_off_hours > 48 warns catabolism; peripheral sodium benzoate warns central line"
+    }
+  ]
+}
