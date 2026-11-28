@@ -27860,6 +27860,64 @@
       }
     );
   };
+  var Mj = (v) => JSON.stringify(v),
+    Mo = (x) => x && typeof x === "object" && !Array.isArray(x);
+  function Mv(a, b, ua, ub, c, p) {
+    if (Mj(a) === Mj(b)) return a;
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    if (Mo(a) && Mo(b)) {
+      let o = {};
+      for (let k of Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).sort()) o[k] = Mv(a[k], b[k], ua, ub, c, p + "." + k);
+      return o;
+    }
+    let w = ua > ub || (ua === ub && Mj(a) >= Mj(b)); /* ничья по времени — детерминированно, одинаково на обоих устройствах */
+    c.push({ path: p, lost: w ? b : a });
+    return w ? a : b;
+  }
+  function Ml(a, b, ua, ub, c, p, tomb) {
+    let m = {},
+      rest = [];
+    for (let x of (a || []).concat(b || [])) {
+      if (!x || x.id == null) {
+        rest.push(x);
+        continue;
+      }
+      if (tomb[x.id] && tomb[x.id] >= (x.ts || 0)) continue; /* удалено на другом устройстве — не воскрешаем */
+      let y = m[x.id];
+      if (!y) m[x.id] = x;
+      else if (Mj(y) !== Mj(x)) {
+        let xw = (x.ts || 0) > (y.ts || 0) || ((x.ts || 0) === (y.ts || 0) && Mj(x) > Mj(y));
+        c.push({ path: p + "#" + x.id, lost: xw ? y : x });
+        m[x.id] = xw ? x : y;
+      }
+    }
+    let seen = {};
+    rest = rest.filter((x) => (seen[Mj(x)] ? false : (seen[Mj(x)] = 1)));
+    return Object.keys(m)
+      .map((k) => m[k])
+      .concat(rest)
+      .sort((x, y) => ((x && x.ts) || 0) - ((y && y.ts) || 0) || (Mj(x) < Mj(y) ? -1 : 1));
+  }
+  function Mk(a, b) {
+    let ua = a.upd || 0,
+      ub = b.upd || 0,
+      c = [],
+      o = {},
+      tomb = Object.assign({}, a.ldel || {});
+    for (let k of Object.keys(b.ldel || {})) tomb[k] = Math.max(tomb[k] || 0, b.ldel[k]);
+    for (let k of Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).sort()) {
+      if (k === "conf" || k === "ldel") continue;
+      o[k] = k === "log" || k === "fluid" ? Ml(a[k], b[k], ua, ub, c, k, tomb) : Mv(a[k], b[k], ua, ub, c, k);
+    }
+    o.upd = Math.max(ua, ub);
+    if (Object.keys(tomb).length) o.ldel = tomb;
+    let cf = {};
+    (a.conf || []).concat(b.conf || [], c).forEach((x) => (cf[Mj(x)] = x)); /* расхождения не теряем: проигравшее значение остаётся в conf */
+    let cl = Object.keys(cf).sort();
+    if (cl.length) o.conf = cl.map((k) => cf[k]);
+    return o;
+  }
   function Gd(e, t) {
     if (!t) return Jx(e);
     let x = Object.assign({}, t.del || {});
@@ -27867,7 +27925,7 @@
     let s = {};
     for (let o of (t.kids || []).concat(e.kids || [])) {
       let r = s[o.id];
-      (!r || (o.upd || 0) >= (r.upd || 0)) && (s[o.id] = o);
+      s[o.id] = r ? Mk(r, o) : o;
     }
     let n = Object.keys(s)
         .map((o) => s[o])
