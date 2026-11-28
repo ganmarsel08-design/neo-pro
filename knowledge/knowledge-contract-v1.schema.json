@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ganmarsel08-design/neo-pro/knowledge/knowledge-contract-v1.schema.json",
+  "title": "knowledge-contract-v1",
+  "description": "Контракт клинических знаний НеоДневника Pro. Все новые правила — candidate_rule / pending_expert / advisory-only до врачебной приёмки. Не заменяет 29 КП РК.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "base_commit_sha", "protocols_29_modified", "protocols_coverage", "recommendations", "synthetic_tests"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^knowledge-contract-v1\\.\\d+\\.\\d+$" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "base_commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "protocols_29_modified": { "const": false },
+    "protocols_coverage": {
+      "type": "object",
+      "required": ["total_kz_protocols"],
+      "properties": { "total_kz_protocols": { "const": 29 } },
+      "patternProperties": { "^audited_v\\d+$": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "uniqueItems": true } }
+    },
+    "recommendations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/recommendation" } },
+    "synthetic_tests": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/test" } }
+  },
+  "$defs": {
+    "isoDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "approval": {
+      "type": "object",
+      "required": ["status", "advisory_only", "reviewer", "date", "decision_ref"],
+      "properties": {
+        "status": { "enum": ["pending_expert", "approved", "rejected"] },
+        "advisory_only": { "type": "boolean" },
+        "reviewer": { "type": ["string", "null"] },
+        "date": { "type": ["string", "null"] },
+        "decision_ref": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["source_id", "organization", "title", "version_date", "jurisdiction", "verified_at"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "organization": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "version_date": { "$ref": "#/$defs/isoDate" },
+        "doi": { "type": ["string", "null"], "pattern": "^10\\.\\d{4,9}/\\S+$" },
+        "source_url": { "type": ["string", "null"], "pattern": "^https://" },
+        "section": { "type": ["string", "null"] },
+        "evidence_level": { "type": ["string", "null"] },
+        "population": { "type": ["string", "null"] },
+        "jurisdiction": { "type": "string", "minLength": 1 },
+        "verified_at": { "$ref": "#/$defs/isoDate" }
+      },
+      "anyOf": [{ "required": ["doi"], "properties": { "doi": { "type": "string" } } }, { "required": ["source_url"], "properties": { "source_url": { "type": "string" } } }]
+    },
+    "warning": {
+      "type": "object",
+      "required": ["id", "text", "severity", "blocking", "review_status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^SW-G\\d+-\\d+$" },
+        "text": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["low", "medium", "high", "critical"] },
+        "blocking": { "type": "boolean" },
+        "review_status": { "enum": ["pending_expert", "approved", "rejected"] }
+      },
+      "additionalProperties": false
+    },
+    "recommendation": {
+      "type": "object",
+      "required": ["recommendation_id", "card_id", "revision", "supersedes", "regulatory_status", "source_type", "approval", "sources", "conflicts", "dose_guard", "safety_warnings"],
+      "properties": {
+        "recommendation_id": { "type": "string", "pattern": "^G\\d+-[A-Z0-9-]+$" },
+        "card_id": { "type": "string", "pattern": "^kz-[a-z0-9-]+$" },
+        "revision": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "supersedes": { "type": ["string", "null"] },
+        "regulatory_status": { "enum": ["candidate_rule", "approved_rule", "superseded"] },
+        "source_type": { "enum": ["guideline", "national_protocol", "review", "trial", "local_protocol"] },
+        "approval": { "$ref": "#/$defs/approval" },
+        "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/source" } },
+        "conflicts": { "type": "array", "items": { "type": "string", "pattern": "^G\\d+-[A-Z0-9-]+$" }, "uniqueItems": true },
+        "dose_guard": {
+          "type": "object",
+          "required": ["required_inputs"],
+          "properties": { "required_inputs": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }, "uniqueItems": true } },
+          "additionalProperties": true
+        },
+        "safety_warnings": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/warning" } },
+        "calculation_result": { "enum": ["blocked", "needs_review", "ready"] }
+      }
+    },
+    "test": {
+      "type": "object",
+      "required": ["id", "group", "assertion"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^TEST-G\\d+-\\d{2}$" },
+        "group": { "type": "string", "pattern": "^G\\d+$" },
+        "assertion": { "type": "string", "minLength": 10 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
