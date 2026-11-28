@@ -23,6 +23,16 @@
   "text": "\n"
  },
  {
+  "file": "src/modules/storage-v1.js",
+  "type": "script",
+  "attrs": "id=\"storage-v1\"",
+  "minify": false
+ },
+ {
+  "type": "text",
+  "text": "\n"
+ },
+ {
   "file": "data/protocols.json",
   "type": "json",
   "attrs": "type=\"application/json\" id=\"proto-src\""
