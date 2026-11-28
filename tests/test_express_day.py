@@ -33,7 +33,7 @@ async def test_future_intervals_are_drafts_not_diary(browser, base):
             assert bad not in t, (sl, bad, t)
         assert 'Состояние ребёнка: ___' in t and 'Неврологический статус: ___' in t
     hydro = d['drafts']['06:00–08:30']['text']
-    assert 'энтерально по плану' in hydro and 'фактически ___' in hydro
+    assert 'энтерально по плану' in hydro and '___ мл (событий нет)' in hydro
     assert not errs
 
 
