@@ -3245,9 +3245,12 @@ window.__neoSaveErr = function (err, key) {
 
   /* ================= КАРТОЧКИ ЗАБОЛЕВАНИЙ (conds.js) ================= */
   var C = function () { return window.__neoConds; };
+  // Единый вход расчёта доз: только строгие конечные положительные числа; масса — ТЕКУЩАЯ, названная врачом (масса при рождении для доз не подставляется);
+  // возраст/срок не подставляются нулями — null означает «неизвестно», и режимы, зависящие от них, не выбираются.
+  function numS(x) { if (x == null) return null; if (typeof x === 'number') return isFinite(x) && x > 0 ? x : null; var s = String(x).trim(); if (!/^\d+(?:[.,]\d+)?$/.test(s)) return null; var v = parseFloat(s.replace(',', '.')); return isFinite(v) && v > 0 ? v : null; }
   function base(E) {
-    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null;
-    return { k: k, ga: k ? num(k.ga) : null, dol: E.f.dol != null ? num(E.f.dol) : (k ? dol(k, E.date) : null), w: num(E.f.w) || (k ? num(k.bw) : null), f: E.f, date: E.date };
+    var k = E.kid && E.kid !== '-' ? getKid(E.kid) : null, dl = E.f.dol != null ? numS(E.f.dol) : (k ? dol(k, E.date) : null);
+    return { k: k, ga: k ? numS(k.ga) : null, dol: dl != null && isFinite(dl) && dl >= 0 ? dl : null, w: numS(E.f.w), wBasis: numS(E.f.w) ? 'current' : null, wBirth: k ? numS(k.bw) : null, f: E.f, date: E.date };
   }
   function cctx(E, e) { var d = C().by[e.id]; return d.ctx(e.st, base(E)); }
   function ctext(E, e) {
@@ -3573,7 +3576,7 @@ window.__neoSaveErr = function (err, key) {
     if (d.ci && !c.gate) h += qHTML(e, { k: d.ci.k, l: d.ci.l, t: 'multi', o: d.ci.o }, c).replace('class="chips', 'class="chips ex-ci');
     if (ds !== null || !d.kzOnly) h += ds ? '<h4 class="ex-wh">💊 Дозы на массу ' + b.w + ' г</h4><ul class="ex-dose">' + ds.map(function (x) {
       return '<li class="' + (x.bad ? 'no' : '') + '"><b>' + esc(x.n) + '</b>' + (x.bad ? ' <span class="ex-tag bad">противопоказан</span>' : '') + (x.note ? ' <span class="ex-tag warn">' + esc(x.note) + '</span>' : '') + '<p>' + x.t + '</p><span class="ex-src">' + esc(x.s) + '</span></li>';
-    }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : (d.doses && !d.kzOnly ? '<p class="meta">Укажите массу — посчитаю дозы.</p>' : '');
+    }).join('') + '</ul><p class="ex-src">Расчёт по формуле на текущую массу. Форму выпуска, разведение и скорость введения сверьте с инструкцией.</p>' : (d.doses && !d.kzOnly ? '<p class="meta">Дозы скрыты: укажите ТЕКУЩУЮ массу (число, г). Масса при рождении' + (b.wBirth ? ' (' + b.wBirth + ' г)' : '') + ' для расчёта доз не используется.</p>' : '');
     h += '<h4 class="ex-wh">Ваше решение</h4><div class="chips ex-tact">' + d.tact.map(function (t) { return chip('data-ctact="' + e.id + '" data-v', t[0], esc(t[1]), e.tact === t[0]); }).join('') + '</div>';
     if (e.tact) {
       var j = d.judge(e.tact, c);
@@ -4078,11 +4081,15 @@ window.__neoSaveErr = function (err, key) {
     doses: function (c) {
       if (!c.w) return null; var kg = c.w / 1000, d = c.dol, ga = c.ga, out = [];
       out.push({ n: 'Бензилпенициллин', t: '25 мг/кг = <b>' + fmt(25 * kg) + ' мг</b> каждые 12 ч (каждые 8 ч, если очень болен)', s: 'КП РК №185; NICE NG195' });
-      var amp = c.w < 2000 ? (d != null && d > 7 ? '50 мг/кг каждые 8 ч' : '25–50 мг/кг каждые 12 ч') : (d != null && d > 7 ? '50 мг/кг каждые 6 ч' : '50 мг/кг каждые 8 ч');
-      var ampMg = c.w < 2000 && !(d != null && d > 7) ? fmt(25 * kg) + '–' + fmt(50 * kg) : fmt(50 * kg);
-      out.push({ n: 'Ампициллин', t: amp + ' = <b>' + ampMg + ' мг</b> на введение', s: 'КР РФ 2025 (масса ' + (c.w < 2000 ? '< 2000' : '> 2000') + ' г, ' + (d != null && d > 7 ? '8–28' : '0–7') + ' дней)' });
+      if (d == null) out.push({ n: 'Ампициллин', t: 'Режим зависит от суток жизни — укажите сутки жизни; дозу не подставляю.', s: 'КР РФ 2025', note: 'нужны сутки жизни' });
+      else {
+        var amp = c.w < 2000 ? (d > 7 ? '50 мг/кг каждые 8 ч' : '25–50 мг/кг каждые 12 ч') : (d > 7 ? '50 мг/кг каждые 6 ч' : '50 мг/кг каждые 8 ч');
+        var ampMg = c.w < 2000 && !(d > 7) ? fmt(25 * kg) + '–' + fmt(50 * kg) : fmt(50 * kg);
+        out.push({ n: 'Ампициллин', t: amp + ' = <b>' + ampMg + ' мг</b> на введение', s: 'КР РФ 2025 (масса ' + (c.w < 2000 ? '< 2000' : '> 2000') + ' г, ' + (d > 7 ? '8–28' : '0–7') + ' дней)' });
+      }
       out.push({ n: 'Гентамицин (КП РК, текст; NICE)', t: '5 мг/кг = <b>' + fmt(5 * kg) + ' мг</b>, вторая доза через 36 ч', s: 'КП РК №185; NICE NG195' });
-      if (ga != null) {
+      if (ga != null && d == null) out.push({ n: 'Гентамицин (КР РФ, по сроку)', t: 'Режим зависит от срока гестации и суток жизни — укажите сутки жизни; дозу не подставляю.', s: 'КР РФ 2025', note: 'нужны сутки жизни' });
+      if (ga != null && d != null) {
         var g = ga < 30 ? (d != null && d > 14 ? [5, 36] : [5, 48]) : ga < 35 ? (d != null && d > 10 ? [5, 24] : [5, 36]) : (d != null && d > 7 ? [5, 24] : [4, 24]);
         out.push({ n: 'Гентамицин (КР РФ, по сроку)', t: g[0] + ' мг/кг = <b>' + fmt(g[0] * kg) + ' мг</b> каждые ' + g[1] + ' ч', s: 'КР РФ 2025 (ГВ ' + ga + ' нед, ' + (d != null ? d + '-е сутки' : 'сутки не указаны') + ')' });
       }
@@ -4116,7 +4123,8 @@ window.__neoSaveErr = function (err, key) {
       if (st.crpv) desc.push('СРБ ' + st.crpv + ' мг/л');
       if (c.h != null) desc.push(c.h + ' ч от начала антибактериальной терапии');
       if (desc.length) p.push(cap(desc.join(', ')) + '.');
-      if (t === 'start') p.push('Начата эмпирическая антибактериальная терапия: бензилпенициллин 25 мг/кг' + (kg ? ' (' + fmt(25 * kg) + ' мг)' : '') + ' каждые 12 ч + гентамицин 5 мг/кг' + (kg ? ' (' + fmt(5 * kg) + ' мг)' : '') + ', вторая доза через 36 ч.' + (st.before === 'yes' ? ' Посев крови взят до первой дозы.' : '') + ' Контроль СРБ через 18–24 ч.');
+      if (t === 'start' && !kg) p.push('Начата эмпирическая антибактериальная терапия: препараты, дозы и кратность — ___ (текущая масса для расчёта не указана).');
+      if (t === 'start' && kg) p.push('Начата эмпирическая антибактериальная терапия: бензилпенициллин 25 мг/кг' + (kg ? ' (' + fmt(25 * kg) + ' мг)' : '') + ' каждые 12 ч + гентамицин 5 мг/кг' + (kg ? ' (' + fmt(5 * kg) + ' мг)' : '') + ', вторая доза через 36 ч.' + (st.before === 'yes' ? ' Посев крови взят до первой дозы.' : '') + ' Контроль СРБ через 18–24 ч.');
       if (t === 'cont') p.push('Антибактериальная терапия продолжена.');
       if (t === 'stop') p.push('Антибактериальная терапия отменена: посев крови отрицательный, клинических признаков инфекции нет, уровень и динамика СРБ без признаков воспаления.');
       if (t === 'c7') p.push('Курс антибактериальной терапии — 7 дней' + (st.cult === 'pos' ? ' (положительный посев крови)' : ' (высокий риск при отрицательном посеве)') + '.');
