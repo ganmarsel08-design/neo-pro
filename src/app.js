@@ -35655,33 +35655,38 @@
       });
     (s(),
       P("#bkSave").addEventListener("click", () => {
-        let n = JSON.stringify({ app: "neo-pro", v: 1, saved: new Date().toISOString(), kids: ve(), team: Dt() }),
-          a = document.createElement("a");
-        ((a.href = URL.createObjectURL(new Blob([n], { type: "application/json" }))),
-          (a.download = "neodnevnik-".concat(ae(Date.now()), ".json")),
-          document.body.appendChild(a),
-          a.click(),
-          a.remove());
+        window.__neoStore.buildBackup().then((n) => {
+          let a = document.createElement("a");
+          ((a.href = URL.createObjectURL(new Blob([n], { type: "application/json" }))),
+            (a.download = "neodnevnik-".concat(ae(Date.now()), ".json")),
+            document.body.appendChild(a),
+            a.click(),
+            a.remove());
+        });
       }),
       P("#bkLoad").addEventListener("change", (n) => {
-        let a = n.target.files[0];
+        let a = n.target.files[0],
+          msg = (t) => {
+            let c = P("#bkMsg");
+            ((c.hidden = !1), (c.textContent = t));
+          };
         a &&
           a
             .text()
-            .then((o) => {
-              let r = JSON.parse(o);
-              if (!Array.isArray(r.kids)) throw new Error();
-              let l = ve(),
-                i = new Set(l.map((p) => p.id));
-              (ba([...l, ...r.kids.filter((p) => !i.has(p.id))]), r.team && !Dt().me && B0.set("team", r.team));
-              let c = P("#bkMsg");
-              ((c.hidden = !1),
-                (c.textContent = "Восстановлено детей: ".concat(r.kids.filter((p) => !i.has(p.id)).length, ".")));
+            .then((o) => window.__neoStore.verify(o))
+            .then((v) => {
+              if (!v.ok) return msg("Файл не подходит или повреждён (" + v.reason + "). База не изменена.");
+              return window.__neoStore.restore(v.data).then((r) => {
+                if (!r.ok) return msg("Восстановление не завершено, база возвращена к прежнему состоянию (" + r.reason + ").");
+                let p = r.rep,
+                  t = "Добавлено детей: " + p.added + ", событий: " + p.events + ", уже было: " + p.skipped + ".";
+                (p.conflicts.length && (t += " Расхождений (не перезаписано): " + p.conflicts.length + "."),
+                  p.bedClash.length && (t += " Койка занята другим пациентом, записи не объединены: " + p.bedClash.length + "."),
+                  v.legacy && (t += " Старый формат без контрольной суммы."),
+                  msg(t));
+              });
             })
-            .catch(() => {
-              let o = P("#bkMsg");
-              ((o.hidden = !1), (o.textContent = "Файл не подходит."));
-            });
+            .catch(() => msg("Файл не подходит. База не изменена."));
       }));
   }
   function Ba() {
